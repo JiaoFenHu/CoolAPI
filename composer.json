@@ -1,0 +1,22 @@
+{
+    "name": "1one/interface.v1",
+    "require": {
+        "phpoffice/phpspreadsheet": "1.8.*",
+        "ext-json": "*",
+        "ext-simplexml": "*",
+        "ext-libxml": "*",
+        "hashids/hashids": "1.0.6",
+        "monolog/monolog": "1.26.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "libs\\": "libs"
+        }
+    },
+    "repositories": {
+        "packagist": {
+            "type": "composer",
+            "url": "https://mirrors.aliyun.com/composer/"
+        }
+    }
+}

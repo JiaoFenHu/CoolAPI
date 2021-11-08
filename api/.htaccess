@@ -1,0 +1,24 @@
+<IfModule mod_rewrite.c>
+ RewriteEngine on
+ 
+ DirectoryIndex index.html index.php
+ 
+ RewriteCond %{REQUEST_FILENAME} !-d
+ RewriteCond %{REQUEST_FILENAME} !-f
+ 
+ RewriteRule ^(.*[^/])$ $1/ 
+ RewriteRule ^([^/]*)/(.*)/$ $1.$2/
+ 
+ RewriteRule ^doc\.([^/]*)/$ index.php?req=$1&doc=1 [QSA,L]
+ 
+ RewriteRule ^([^/]*)/$ index.php?req=$1 [QSA,L]
+</IfModule>
+
+#update php.ini configure
+#nginx
+#fastcgi_param PHP_VALUE "upload_max_filesize=500M\ndisplay_errors=on";
+
+#apache
+php_value upload_max_filesize "30M"
+php_value post_max_size "30M"
+php_flag display_errors on
