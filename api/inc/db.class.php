@@ -46,79 +46,152 @@
  */
 class DB extends PDO
 {
-
+    /**
+     * PDO 对象
+     * @var stdClass
+     */
     protected $pdo;
+
+    /**
+     * 执行结果
+     * @var string
+     */
     protected $res;
+
+    /**
+     * 配置
+     * @var string[]
+     */
     protected $config;
-    public $queryarr;
 
-    /* 构造函数 */
+    /**
+     * 执行的 sql 列表
+     * @var string[]
+     */
+    public $query_arr;
 
+    /**
+     * integral 字段类型组合
+     * @var string[]
+     */
+    private $int_array;
+
+    /**
+     * float 字段类型组合
+     * @var string[]
+     */
+    private $float_array;
+
+    private $where;
+    private $group_value;
+    private $pre_array;
+    private $join;
+    private $main_table;
+    private $table;
+    private $column;
+
+    /**
+     * DB constructor.
+     * @param $config
+     */
     function __construct($config)
     {
-        $this->queryarr = array();
+        $this->query_arr = array();
         $this->config = $config;
+        $this->int_array = array('bit', 'tinyint', 'bool', 'boolean', 'smallint', 'mediumint', 'int', 'integer', 'bigint');
+        $this->float_array = array('float', 'double', 'decimal');
         $this->connect();
-        $this->intarray = array('bit', 'tinyint', 'bool', 'boolean', 'smallint', 'mediumint', 'int', 'integer', 'bigint');
-        $this->floatarray = array('float', 'double', 'decimal');
     }
 
-    /* 运行并存储query记录 */
-
+    /**
+     * 运行并存储query记录
+     * @param string $sql
+     * @param int $mode
+     * @return false|PDOStatement
+     */
     public function query($sql, $mode = 0)
     {
-        $this->queryarr[] = $sql;
+        $this->query_arr[] = $sql;
         if ($mode == 0) {
             return parent::query($sql);
         }
     }
 
-    /* 数据库连接 */
-
+    /**
+     * 数据库连接
+     */
     private function connect()
     {
         $host = $this->config['host'];
         if (!empty($this->config['port'])) {
-            $host .= ':' . $this->config['port'];
+            $host .= ":{$this->config['port']}";
         }
-        parent::__construct($this->config['dbtype'] . ':host=' . $host . ';dbname=' . $this->config['database'], $this->config['name'], $this->config['password']);
-        $this->query('set names ' . $this->config['charset'] . ';');
-        //自己写代码捕获Exception
+        parent::__construct(
+            "{$this->config['db_type']}:host={$host};dbname={$this->config['database']}",
+            $this->config['name'],
+            $this->config['password']
+        );
+
+        $this->query("SET NAMES {$this->config['charset']};");
+
+        // 如果执行遇到错误，将以异常的形式抛出异常，使用 PDOException捕获
         $this->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        // 尝试驱动使用本地预处理 true:强制使用本地预处理 false:试着使用本地预处理
         $this->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-        if (!empty($this->config['option'])) {
+        if (!empty($this->config['option']) && is_array($this->config['option'])) {
             foreach ($this->config['option'] as $key => $value) {
                 $this->setAttribute($key, $value);
             }
         }
     }
 
-    /*
-     * int	debug	是否开启调试，开启则输出sql语句
-     * 				0	不开启
-     * 				1	开启
-     * 				2	开启并终止程序
-     * int	log	是否开启日志，开启则记录所有操作sql语句
-     * 				0	不开启
-     * 				1	开启
-     * int	prepare	是否开启预处理，开启则使用预处理提交
-     * 				    0	不开启
-     * 				    1	开启
+    /**
+     * 设置一些辅助配置
+     * @debug 是否开启调试，开启则输出sql语句
+     *     0:不开启
+     *     1:开启
+     *     2:开启并终止程序
+     * @log 是否开启日志，开启则记录所有操作sql语句
+     *     0:不开启
+     *     1:开启
+     * @prepare 是否开启预处理，开启则使用预处理提交
+     *     0:不开启
+     *     1:开启
+     * @param $set
+     * @param $value
      */
-
-    public function set($set, $value)
+    public function setConfig($set, $value)
     {
         $this->config[$set] = $value;
     }
 
-    public function getconfig($key)
+    /**
+     * 获取配置信息
+     * @param $key
+     * @return string|array
+     */
+    public function getConfig($key)
     {
         return $this->config[$key];
     }
 
+    /**
+     * 初始化参数
+     */
+    private function init()
+    {
+        $this->group_value = array();
+        $this->pre_array = array();
+        $this->join = [];
+        $this->table = '';
+        $this->main_table = '';
+        $this->where = array();
+    }
+
     private function where($where)
     {
-        $this->where = $this->wheresql($where, 'and', '', 1);
+        $this->where = $this->whereSql($where, 'and', '', 1);
         if (!empty($this->where['where'])) {
             $this->where['where'] = ' where ' . $this->where['where'];
         }
@@ -127,17 +200,7 @@ class DB extends PDO
         }
     }
 
-    private function init()
-    {
-        $this->groupvalue = '';
-        $this->prearray = array();
-        $this->join = '';
-        $this->table = '';
-        $this->maintable = '';
-        $this->where = '';
-    }
-
-    private function wheresql($where, $connect = 'and', $sptag = '', $start = 0)
+    private function whereSql($where, $connect = 'and', $sptag = '', $start = 0)
     {
         $return = array();
         $tag = 0;
@@ -1093,14 +1156,19 @@ class DB extends PDO
     }
 
     /**
-     * select($table, $join, $columns, $where)
+     * select 列表数据查询
      * mode 0 多条记录 1 单条记录 2总数 3只适用于查询单个字段下的内容，直接返回对应的内容或者数组 4直接返回sql语句
-     * // [>] == LEFT JOIN
-     * // [<] == RIGH JOIN
-     * // [<>] == FULL JOIN
-     * // [><] == INNER JOIN
+     * @param $table
+     * @param array $join
+     *      - [>] == LEFT JOIN
+     *      - [<] == RIGHT JOIN
+     *      - [<>] == FULL JOIN
+     *      - [><] == INNER JOIN
+     * @param array $columns
+     * @param array $where
+     * @return array
      */
-    public function select($table, $join = '', $columns = '', $where = [])
+    public function select($table, $join = [], $columns = [], $where = [])
     {
         //参数处理
         $this->init();
@@ -1118,9 +1186,9 @@ class DB extends PDO
         }
         $this->getcolumn($table);
         $this->columns($columns);
-        if (array_key_exists('isdel', $this->column[$this->maintable]) && $this->config['realdelete'] == 0) {
+        if (array_key_exists('isdel', $this->column[$this->main_table]) && $this->config['realdelete'] == 0) {
             if (!empty($where)) {
-                $where[$this->maintable . '.isdel[!]'] = 1;
+                $where[$this->main_table . '.isdel[!]'] = 1;
             } else {
                 $where = array('isdel[!]' => 1);
             }

@@ -6,7 +6,7 @@ require_once(INC_DIR . 'function.inc.php');
 require_once(INC_DIR . 'defines.' . PROJECT_ENV . '.php');
 
 $db_config = array(
-	'dbtype' => 'mysql',
+	'db_type' => 'mysql',
 	'host' => 'localhost',
 	'port' => '',
 	'database' => 'zx',
@@ -14,7 +14,7 @@ $db_config = array(
 	'password' => 'eoner.com',
 	'log' => 1,
 	'prepare' => 1,
-	'realdelete' => 0, //虚拟删除开关，设置为0时，调用delete方法不删除对应条目，而是把对应条目的is_del属性设置为1
+	'real_delete' => 0, //虚拟删除开关，设置为0时，调用delete方法不删除对应条目，而是把对应条目的is_del属性设置为1
 	'charset' => 'utf8',
 	'prefix' => 'tb_',
 	'option' => array(PDO::ATTR_CASE => PDO::CASE_NATURAL),
