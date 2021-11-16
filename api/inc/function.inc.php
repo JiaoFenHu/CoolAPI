@@ -9,8 +9,8 @@ function json_encode_ex($value)
 {
     if (version_compare(PHP_VERSION, '5.4.0', '<')) {
         $str = json_encode($value);
-        $str = preg_replace_callback("#\\\u([0-9a-f]{4})#i", function ($matchs) {
-            return iconv('UCS-2BE', 'UTF-8', pack('H4', $matchs[1]));
+        $str = preg_replace_callback("#\\\u([0-9a-f]{4})#i", function ($matches) {
+            return iconv('UCS-2BE', 'UTF-8', pack('H4', $matches[1]));
         }, $str);
         return $str;
     } else {
@@ -140,7 +140,7 @@ function create_dirs($dir)
  * @param string $end
  * @return string
  */
-function getordernum($pre, $end = '')
+function generate_unique_code($pre, $end = '')
 {
     $yCode = array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P');
     $orderSn = $yCode[intval(date('Y')) - 2017] . strtoupper(dechex(date('m'))) . date('d') . substr(time(), -5) . substr(microtime(), 2, 5) . sprintf('%02d', rand(0, 99));
@@ -149,43 +149,25 @@ function getordernum($pre, $end = '')
 
 
 /**
- * 创建单号
- * @param $pre
- * @param string $end
- * @return string
- */
-function generateOrderNo($pre, $end = '')
-{
-    $yCode = array('21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33');
-    $orderSn = $yCode[intval(date('Y')) - 2021]  . date('md') . substr(time(), -5) . substr(microtime(), 2, 5) . sprintf('%02d', rand(0, 99));
-    return $pre . $orderSn . $end;
-}
-
-/**
  * 获取远程数据
- *
- * @param string $dataurl
+ * @param string $url
  * @param string $method
  * @param array $data
  * @param array $header
  * @param integer $time_out
  * @return string
  */
-function geturlcontent($dataurl, $method = 'GET', $data = [], $header = [], $time_out = 10)
+function get_curl_content($url, $method = 'GET', $data = [], $header = [], $time_out = 10)
 {
     $method = strtoupper($method);
     if (!empty($data) && $method == 'GET') {
-        if (strpos($dataurl, '?') == false) {
-            $dataurl .= '?';
-        } else {
-            $dataurl .= '&';
-        }
-        $dataurl .= http_build_query($data);
+        $url .= strpos($url, '?') == false ? '?' : '&';
+        $url .= http_build_query($data);
     }
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_TIMEOUT, $time_out);
-    curl_setopt($ch, CURLOPT_URL, $dataurl); //抓取指定网页
+    curl_setopt($ch, CURLOPT_URL, $url); //抓取指定网页
     curl_setopt($ch, CURLOPT_HEADER, 0); //设置header
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); //要求结果为字符串且输出到屏幕上
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE); // https请求 不验证证书和hosts
@@ -209,79 +191,16 @@ function geturlcontent($dataurl, $method = 'GET', $data = [], $header = [], $tim
     return $response_data;
 }
 
-
-//发送邮件
-function sendmail($address, $subject, $body)
-{
-    require 'lib/phpmailer/PHPMailerAutoload.php';
-    //Create a new PHPMailer instance
-    $mail = new PHPMailer;
-    $mail->CharSet = 'UTF-8';
-
-    //$mail->SMTPDebug = 3;                               // Enable verbose debug output
-
-    $mail->isSMTP();                                      // Set mailer to use SMTP
-    $mail->Host = MAILHOST;  // Specify main and backup SMTP servers
-    $mail->SMTPAuth = true;                               // Enable SMTP authentication
-    $mail->Username = MAILNAME;                 // SMTP username
-    $mail->Password = MAILPWD;                           // SMTP password
-    //$mail->SMTPSecure = 'tls';                            // Enable TLS encryption, `ssl` also accepted
-    $mail->Port = 25;                                    // TCP port to connect to
-
-    $mail->setFrom(MAILNAME, PLATFORM);
-    foreach ($address as $value) {
-        if (!is_array($value)) {
-            $mail->addAddress($value);     // Add a recipient
-        } else {
-            $mail->addAddress($value[0], $value[1]);     // Add a recipient
-        }
-    }
-    //邮件回复地址
-    //$mail->addReplyTo('info@example.com', 'Information');
-    //抄送
-    //$mail->addCC('cc@example.com');
-    //暗抄送
-    //$mail->addBCC('bcc@example.com');
-    //添加附件
-    /*$mail->addAttachment('/var/tmp/file.tar.gz');         // Add attachments
-    $mail->addAttachment('/tmp/image.jpg', 'new.jpg');    // Optional name
-    $mail->isHTML(true);                                  // Set email format to HTML*/
-
-    $mail->Subject = $subject;
-    $mail->Body = $body;
-    //不支持html的邮件展示
-    //$mail->AltBody = 'This is the body in plain text for non-HTML mail clients';
-    $mail = $mail->send();
-    $return = array();
-    if (!$mail) {
-        $return['state'] = true;
-        $return['errorinfo'] = $mail->ErrorInfo;
-    } else {
-        $return['state'] = false;
-    }
-    return $return;
-}
-
-
-function dateformat($data)
-{
-    $diftime = time() - strtotime($data);
-    $day = floor($diftime / (24 * 60 * 60));
-    if ($day == 0) {
-        $return = '一天内';
-    } elseif ($day <= 30) {
-        $return = tochinasenum($day) . '天前';
-    } else {
-        $return = '一个月前';
-    }
-    return $return;
-}
-
-function tochinasenum($num)
+/**
+ * 转换为中文数字
+ * @param $num
+ * @return string|null
+ */
+function to_chinese_number($num)
 {
     $char = array("零", "一", "二", "三", "四", "五", "六", "七", "八", "九");
     $dw = array("", "十", "百", "千", "万", "亿", "兆");
-    $retval = "";
+    $ret_val = "";
     $proZero = false;
     for ($i = 0; $i < strlen($num); $i++) {
         if ($i > 0) $temp = (int)(($num % pow(10, $i + 1)) / pow(10, $i));
@@ -293,18 +212,22 @@ function tochinasenum($num)
         else $proZero = false;
 
         if ($proZero) {
-            if ($retval == "") continue;
-            $retval = $char[$temp] . $retval;
-        } else $retval = $char[$temp] . $dw[$i] . $retval;
+            if ($ret_val == "") continue;
+            $ret_val = $char[$temp] . $ret_val;
+        } else $ret_val = $char[$temp] . $dw[$i] . $ret_val;
     }
-    if ($retval == "一十") $retval = "十";
-    return $retval;
+    if ($ret_val == "一十") $ret_val = "十";
+    return $ret_val;
 }
 
-//获取内网IP，0返回IP地址，1返回IPV4地址数字
-function getip($type = 1)
+/**
+ * 获取内网IP
+ * @param boolean $is_long 0返回IP地址，1返回IPV4数字地址
+ * @return mixed
+ */
+function get_ip($is_long = false)
 {
-    $type = ($type === 1) ? 1 : 0;
+    $type = $is_long ? 1 : 0;
     static $ip = NULL;
     if ($ip !== NULL) {
         return $ip[$type];
@@ -325,7 +248,12 @@ function getip($type = 1)
     return $ip[$type];
 }
 
-//获取中文拼音
+/**
+ * 获取中文拼音
+ * @param $_String
+ * @param string $_Code
+ * @return array|string|string[]|null
+ */
 function pinyin($_String, $_Code = 'utf-8')
 {
     $_DataKey = "a|ai|an|ang|ao|ba|bai|ban|bang|bao|bei|ben|beng|bi|bian|biao|bie|bin|bing|bo|bu|ca|cai|can|cang|cao|ce|ceng|cha" .
@@ -408,6 +336,11 @@ function _Pinyin($_Num, $_Data)
     }
 }
 
+/**
+ * utf8 转 gb2312
+ * @param $_C
+ * @return false|string
+ */
 function _U2_Utf8_Gb($_C)
 {
     $_String = '';
@@ -430,14 +363,6 @@ function _U2_Utf8_Gb($_C)
 }
 
 
-function _Array_Combine($_Arr1, $_Arr2)
-{
-    for ($i = 0; $i < count($_Arr1); $i++) {
-        $_Res[$_Arr1[$i]] = $_Arr2[$i];
-    }
-    return $_Res;
-}
-
 /**
  * 预处理数据库字段
  * @param string $table
@@ -445,7 +370,7 @@ function _Array_Combine($_Arr1, $_Arr2)
  * @param string $columnname
  * @return string
  */
-function getcolumn($table, $mode = 0, $columnname = '')
+/*function get_column($table, $mode = 0, $columnname = '')
 {
     global $db;
     $db->getcolumn($table, 1);
@@ -509,121 +434,21 @@ function getcolumn($table, $mode = 0, $columnname = '')
     }
     echo $out;
     exit;
-}
+}*/
 
 
 /**
- * Undocumented function
- *
- * @param string $contents
- * @param integer $get_attributes
- * @return array
+ * xml转数组
+ * @param string $xml
+ * @return mixed
  */
-function xml2array($contents, $get_attributes = 1)
+function xml2array($xml)
 {
-    if (!$contents) return array();
-    if (!function_exists('xml_parser_create')) {
-        //print "'xml_parser_create()' function not found!";
-        return array();
-    }
-    //Get the XML parser of PHP - PHP must have this module for the parser to work
-    $parser = xml_parser_create();
-    xml_parser_set_option($parser, XML_OPTION_CASE_FOLDING, 0);
-    xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
-    xml_parse_into_struct($parser, $contents, $xml_values);
-    xml_parser_free($parser);
-    if (!$xml_values) return; //Hmm...
-    //Initializations
-    $xml_array = array();
-    $parents = array();
-    $opened_tags = array();
-    $arr = array();
-    $current = &$xml_array;
-    //Go through the tags.
-    foreach ($xml_values as $data) {
-        unset($attributes, $value); //Remove existing values, or there will be trouble
-        //This command will extract these variables into the foreach scope
-        // tag(string), type(string), level(int), attributes(array).
-        extract($data); //We could use the array by itself, but this cooler.
-        $result = '';
-        if ($get_attributes) { //The second argument of the function decides this.
-            $result = array();
-            if (isset($value)) $result['value'] = $value;
-            //Set the attributes too.
-            if (isset($attributes)) {
-                foreach ($attributes as $attr => $val) {
-                    if ($get_attributes == 1) $result['attr'][$attr] = $val; //Set all the attributes in a array called 'attr'
-                }
-            }
-        } elseif (isset($value)) {
-            $result = $value;
-        }
-        //See tag status and do the needed.
-        if ($type == "open") { //The starting of the tag '<tag>'
-            $parent[$level - 1] = &$current;
-            if (!is_array($current) or (!in_array($tag, array_keys($current)))) { //Insert New tag
-                $current[$tag] = $result;
-                $current = &$current[$tag];
-            } else { //There was another element with the same tag name
-                if (isset($current[$tag][0])) {
-                    array_push($current[$tag], $result);
-                } else {
-                    $current[$tag] = array($current[$tag], $result);
-                }
-                $last = count($current[$tag]) - 1;
-                $current = &$current[$tag][$last];
-            }
-        } elseif ($type == "complete") { //Tags that ends in 1 line '<tag />'
-            //See if the key is already taken.
-            if (!isset($current[$tag])) { //New Key
-                $current[$tag] = $result;
-            } else { //If taken, put all things inside a list(array)
-                if ((is_array($current[$tag]) and $get_attributes == 0) //If it is already an array...
-                    or (isset($current[$tag][0]) and is_array($current[$tag][0]) and $get_attributes == 1)
-                ) {
-                    array_push($current[$tag], $result); // ...push the new element into that array.
-                } else { //If it is not an array...
-                    $current[$tag] = array($current[$tag], $result); //...Make it an array using using the existing value and the new value
-                }
-            }
-        } elseif ($type == 'close') { //End of tag '</tag>'
-            $current = &$parent[$level - 1];
-        }
-    }
-    return ($xml_array);
+    libxml_disable_entity_loader(true);
+    $xml = simplexml_load_string($xml, "SimpleXMLElement",  LIBXML_NOCDATA);
+    return json_decode(json_encode($xml), true);
 }
 
-
-/**
- * 数据接口签名
- *
- * @param array $param
- * @param string $random
- * @return string
- */
-function create_sign($param, $random)
-{
-    ksort($param);
-    return strtoupper(sha1(strtoupper(md5(http_build_query($param) . '&secretKey=' . $random))));
-}
-
-/**
- * 验签
- * @param array $param
- * @return boolean
- */
-function api_sign_check($param)
-{
-    $sign = $param['sign'];
-    if (!empty($sign)) {
-        unset($param['sign']);
-        $check = create_sign($param, RANDOM);
-        if ($check == $sign) {
-            return true;
-        }
-    }
-    return false;
-}
 
 /**
  * 判断当前协议是否为HTTPS
@@ -664,13 +489,12 @@ function check_mobile($mobile)
     $preg = '/^1([38][0-9]|4[579]|5[0-3,5-9]|6[6]|7[0135678]|9[89])\d{8}$/';
     if (!preg_match($preg, $mobile)) {
         return false;
-    } else {
-        return true;
     }
+    return true;
 }
 
 /**
- * 明文模糊化
+ * 字符串脱敏处理
  * @param string $string 不能是中文
  * @param int $be
  * @param int $en
@@ -687,11 +511,11 @@ function string_fuzzy($string, $be = 3, $en = 4, $repeat_mi = 4)
 }
 
 /**
- * 删除数据库返回的数组键为int的元素
+ * 删除数组数字下标
  * @param $db_data
  * @return array
  */
-function remove_db_data_num($db_data)
+function remove_key_number($db_data)
 {
     $return_data = [];
     if (!empty($db_data) && is_array($db_data)) {
@@ -708,29 +532,31 @@ function remove_db_data_num($db_data)
     return $return_data;
 }
 
-
 /**
  * 获取随机字符串
- *
  * @param integer $length	随机字符串长度
  * @param integer $mode	选项
  * @return string
  */
-function get_rand_string($length = 16, $mode = 2)
+function generate_random_code($length = 16, $mode = 2)
 {
     $randoms = [
         '0123456789',
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
         '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     ];
-    $codeSet = $randoms[$mode];
+
+    if ($mode > 2 || !is_int($mode)) {
+        $mode = 2;
+    }
+    $codeSet = str_split($randoms[$mode]);
+    $codeLen = count($codeSet) - 1;
     $nonceStr = '';
     for ($i = 0; $i < $length; $i++) {
-        $nonceStr .= $codeSet[mt_rand(0, (strlen($codeSet) - 1))];
+        $nonceStr .= $codeSet[mt_rand(0, $codeLen)];
     }
     return $nonceStr;
 }
-
 
 /**
  * 对二维数组的一/多个字段进行排序
@@ -759,33 +585,31 @@ function multi_array_sort()
 
 /**
  * 对数组进行limit筛选返回
- * @param array $datas
+ * @param array $data
  * @param int $from
  * @param int $limit
- * @return void
+ * @return array
  */
-function page_array($datas, $from, $limit)
+function page_array($data, $from, $limit)
 {
-    $pageData = array_slice($datas, $from, $limit);
-    return $pageData;
+    return array_slice($data, $from, $limit);
 }
 
 /**
  * 根据ip获取地理地址信息
  *
  * @param string $ipv4
- * @return array
+ * @return array|string
  */
 function get_ip_address($ipv4)
 {
-    $url = "http://ip-api.com/json/{$ipv4}?lang=zh-CN";
-    $resp = geturlcontent($url);
-    $address = [];
-    if ($resp['status'] == 'success') {
-        $address['country'] = $resp['country'];
-        $address['city'] = $resp['city'];
-        $address['lat'] = $resp['lat'];
-        $address['lon'] = $resp['lon'];
+    include_once(LIB_DIR . "ip2region/Ip2Region.class.php");
+
+    $ip2region  = new Ip2Region(LIB_DIR . 'ip2region/data/ip2region.db');
+    try {
+        $ipInfos = $ip2region->btreeSearch($ipv4);
+        return $ipInfos;
+    } catch (Exception $e) {
+        return $e->getMessage();
     }
-    return $address;
 }

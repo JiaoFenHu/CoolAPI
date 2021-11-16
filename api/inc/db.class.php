@@ -183,7 +183,7 @@ class DB extends PDO
     {
         $this->group_value = array();
         $this->pre_array = array();
-        $this->join = [];
+        $this->join = array();
         $this->table = '';
         $this->main_table = '';
         $this->where = array();
@@ -215,6 +215,7 @@ class DB extends PDO
             if (empty($key) || is_numeric($key)) {
                 $key = 'and';
             } else {
+
                 if (substr($key, 0, 1) != '#') {
                     $function = 0;
                 } else {
