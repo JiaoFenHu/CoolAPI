@@ -193,10 +193,10 @@ class DB extends PDO
     {
         $this->where = $this->whereSql($where, 'and', '', 1);
         if (!empty($this->where['where'])) {
-            $this->where['where'] = ' where ' . $this->where['where'];
+            $this->where['where'] = ' WHERE ' . $this->where['where'];
         }
-        if (!empty($this->where['prewhere'])) {
-            $this->where['prewhere'] = ' where ' . $this->where['prewhere'];
+        if (!empty($this->where['pre_where'])) {
+            $this->where['pre_where'] = ' WHERE ' . $this->where['pre_where'];
         }
     }
 
@@ -207,39 +207,44 @@ class DB extends PDO
         $function = 0;
         if ($sptag == 'having') {
             $type = $sptag;
-            $return = $this->wherereturn($return, $type, ' ' . $sptag . ' ');
+            $return = $this->whereReturn($return, $type, ' ' . $sptag . ' ');
         } else {
             $type = 'where';
         }
         foreach ($where as $key => $value) {
+            $function = 0;
+            $key_function = 0;
+
             if (empty($key) || is_numeric($key)) {
                 $key = 'and';
             } else {
-
-                if (substr($key, 0, 1) != '#') {
-                    $function = 0;
-                } else {
+                if (substr($key, 0, 1) === '#') {
                     $function = 1;
                     $key = substr($key, 1, strlen($key));
                 }
-                if (substr($key, 0, 1) != '@') {
-                    $keyfunction = 0;
-                } else {
-                    $keyfunction = 1;
+
+                if (substr($key, 0, 1) === '@') {
+                    $key_function = 1;
                     $key = substr($key, 1, strlen($key));
                 }
+
                 $key = explode('#', $key);
                 if (count($key) > 1) {
                     array_pop($key);
                 }
                 $key = trim(implode($key));
             }
-            $typearray = array(0 => array('order', 'grouporder', 'gorder', 'having', 'group', 'limit'), 1 => array('or', 'and'), 2 => array('like', 'having'));
-            if (!in_array(strtolower($key), $typearray[0])) {
+
+            $types = array(
+                0 => array('order', 'grouporder', 'gorder', 'having', 'group', 'limit'),
+                1 => array('or', 'and'),
+                2 => array('like', 'having')
+            );
+            if (!in_array(strtolower($key), $types[0])) {
                 if ($tag == 0) {
                     $tag = 1;
                 } else {
-                    $return = $this->wherereturn($return, $type, ' ' . $connect . ' ');
+                    $return = $this->whereReturn($return, $type, ' ' . $connect . ' ');
                 }
             }
             if (in_array(strtolower($key), $typearray[1])) {
@@ -625,12 +630,12 @@ class DB extends PDO
         return $return;
     }
 
-    public function getcolumn($table, $note = 0)
+    public function getColumn($table, $note = 0)
     {
         $table = explode(',', $table);
         if (count($table) > 1) {
             foreach ($table as $tables) {
-                $this->getcolumn($tables, $note);
+                $this->getColumn($tables, $note);
             }
         } else {
             $table = $table[0];
@@ -642,12 +647,12 @@ class DB extends PDO
                 if (!empty($tables[5])) {
                     $table = $tables[5];
                 }
-                $tablecolumn = $column->fetchAll();
-                foreach ($tablecolumn as $value) {
-                    $columnset = array();
-                    preg_match('#^([^\(]*)(\(([^\)]+)\))?(.*)$#', $value['Type'], $tempvalue);
+                $table_column = $column->fetchAll();
+                foreach ($table_column as $value) {
+                    $column_set = array();
+                    preg_match('#^([^\(]*)(\(([^\)]+)\))?(.*)$#', $value['Type'], $temp_value);
                     $key = $value['Field'];
-                    $columnset['type'] = $tempvalue[1];
+                    $columnset['type'] = $temp_value[1];
                     if (!empty($tempvalue[3])) {
                         $tempvalue[3] = explode(',', $tempvalue[3]);
                         if (in_array($columnset['type'], $this->intarray)) {
@@ -672,6 +677,11 @@ class DB extends PDO
         }
     }
 
+    /**
+     * 处理表名
+     * @param $table
+     * @param string $name
+     */
     private function table($table, $name = 'table')
     {
         $table = explode(',', $table);
@@ -684,7 +694,7 @@ class DB extends PDO
             preg_match('#^(`)?([^\(`]*)(`)?(\(([^\)]*)\))?$#', $table, $tables);
             $tables[2] = $this->config['prefix'] . $tables[2];
             $table = '`' . $tables[2] . '`';
-            if (empty($this->maintable) || $name != 'table') {
+            if (empty($this->main_table) || $name != 'table') {
                 $this->$name = $table;
             } else {
                 $this->$name .= ',' . $table;
@@ -692,12 +702,8 @@ class DB extends PDO
             if (!empty($tables[5])) {
                 $this->$name .= ' as ' . $tables[5];
             }
-            if (empty($this->maintable)) {
-                if (empty($tables[5])) {
-                    $this->maintable = $tables[2];
-                } else {
-                    $this->maintable = $tables[5];
-                }
+            if (empty($this->main_table)) {
+                $this->main_table = empty($tables[5]) ? $tables[2] : $tables[5];
             }
         }
     }
@@ -711,7 +717,7 @@ class DB extends PDO
             if (!empty($keys[2])) {
                 switch ($keys[2]) {
                     case '>':
-                        $this->join .= 'left';
+                        $this->join .= 'LEFT';
                         break;
                     case '<':
                         $this->join .= 'right';
@@ -1089,7 +1095,8 @@ class DB extends PDO
                     $sql = 'select ' . $this->columns . ' from ' . $this->table . $this->join . $where . $this->where['order'] . $this->where['limit'];
                 }
                 break;
-            case 'has':;
+            case 'has':
+                ;
             case 'count':
                 if (!empty($this->groupvalue)) {
                     $sql = 'select count(*) from (select ' . $this->groupvalue . ' from ' . $this->table . $this->join . $where . $this->where['group'] . $this->where['having'] . $this->where['limit'] . ') a';
@@ -1175,11 +1182,11 @@ class DB extends PDO
         $this->init();
         $this->table($table);
         if (is_array($join)) {
-            if (key($join)) {
+            if (is_string(key($join))) {
                 $joins = substr(key($join), 0, 1);
             }
         }
-        if ($joins == '[') {
+        if (isset($joins) && $joins == '[') {
             $this->join($join);
         } else {
             $where = $columns;
