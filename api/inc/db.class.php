@@ -652,19 +652,19 @@ class DB extends PDO
                     $column_set = array();
                     preg_match('#^([^\(]*)(\(([^\)]+)\))?(.*)$#', $value['Type'], $temp_value);
                     $key = $value['Field'];
-                    $columnset['type'] = $temp_value[1];
-                    if (!empty($tempvalue[3])) {
-                        $tempvalue[3] = explode(',', $tempvalue[3]);
-                        if (in_array($columnset['type'], $this->intarray)) {
-                            $columnset['length'] = $tempvalue[3][0];
-                            $columnset['decimalpoint'] = $tempvalue[3][1];
-                        } else if ($columnset['type'] == 'enum') {
-                            $columnset['list'] = $tempvalue[3];
+                    $column_set['type'] = $temp_value[1];
+                    if (!empty($temp_value[3])) {
+                        $temp_value[3] = explode(',', $temp_value[3]);
+                        if (in_array($column_set['type'], $this->int_array)) {
+                            $column_set['length'] = $temp_value[3][0];
+                            $column_set['decimal_point'] = $temp_value[3][1];
+                        } else if ($column_set['type'] == 'enum') {
+                            $column_set['list'] = $temp_value[3];
                         } else {
-                            $columnset['list'] = $tempvalue[5];
+                            $column_set['list'] = $temp_value[5];
                         }
                     }
-                    $this->column[$table][$key] = $columnset;
+                    $this->column[$table][$key] = $column_set;
                     if ($note == 1) {
                         $this->column[$table][$key]['comment'] = $value['Comment'];
                     }
@@ -708,6 +708,10 @@ class DB extends PDO
         }
     }
 
+    /**
+     * join连表
+     * @param array $join
+     */
     private function join($join)
     {
         foreach ($join as $key => $value) {

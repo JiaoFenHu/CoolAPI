@@ -4,13 +4,15 @@ class demo
     public $db;
     public $api;
     public $table;
+    private $join_table;
 
     function __construct($api)
     {
         global $db;
         $this->db = $db;
         $this->api = $api;
-        $this->table = 'area';
+        $this->table = 'admin_member';
+        $this->join_table = 'admin_member(am)';
     }
 
     // 验证

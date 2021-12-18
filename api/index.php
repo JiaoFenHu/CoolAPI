@@ -98,13 +98,13 @@ class api
             $this->req = explode('.', $_REQUEST['req']);
             $this->modulename = $this->req[0];
             if ($this->debug == 1) {
-                $this->log_id = $this->db->insert('insterface_log', array('ip' => getip(), 'url' => $_SERVER['SCRIPT_NAME'], 'req' => $_REQUEST['req'], '#createtime' => 'now()', '#edittime' => 'now()'));
+                // $this->log_id = $this->db->insert('interface_log', array('ip' => get_ip(), 'url' => $_SERVER['SCRIPT_NAME'], 'req' => $_REQUEST['req'], '#createtime' => 'now()', '#edittime' => 'now()'));
             }
             unset($this->req[0]);
             $this->req = implode('.', $this->req);
             $this->infoarr = array();
-            $this->module = includeclass($this, $this->modulename);
-            $this->includefile($this->infodir . "/" . $this->modulename . '.php');
+            $this->module = include_class($this, $this->modulename);
+            $this->include_file($this->infodir . "/" . $this->modulename . '.php');
             if ($this->debug == 1) {
                 $this->dataerror('请确认接口类型' . $this->modulename . '-' . $this->req);
             }
@@ -145,7 +145,7 @@ class api
     }
 
     //加载单个文件;
-    function includefile($file)
+    function include_file($file)
     {
         if (file_exists($file)) {
             require_once($file);
@@ -218,7 +218,7 @@ class api
         }
         echo $this->data;
         if ($this->debug == 1) {
-            $this->db->update('insterface_log', array('returndata' => $this->data, '#edittime' => 'now()'), array('tbid' => $this->log_id));
+            // $this->db->update('interface_log', array('returndata' => $this->data, '#edittime' => 'now()'), array('tbid' => $this->log_id));
         }
         exit;
     }
@@ -387,7 +387,7 @@ class api
             $methed = 'GET';
         }
         if ($this->debug == 1) {
-            $this->db->update('insterface_log', array('methed' => $methed, 'data' => json_encode_ex($this->param), '#edittime' => 'now()'), array('tbid' => $this->log_id));
+            // $this->db->update('interface_log', array('methed' => $methed, 'data' => json_encode_ex($this->param), '#edittime' => 'now()'), array('tbid' => $this->log_id));
         }
     }
 
@@ -599,7 +599,7 @@ class api
                 'api_name' => $this->info['summary'],
                 'api_module' => $this->subset_api['name'],
                 'api_uri' => $this->modulename . '/' . str_replace('.', '/', $this->info['req']),
-                'api_url' => SITEROOTURL . 'api' . '/' . $this->modulename . '/' . str_replace('.', '/', $this->info['req']),
+                'api_url' => API_DOMAIN . 'api' . '/' . $this->modulename . '/' . str_replace('.', '/', $this->info['req']),
                 'method' => $this->info['method'],
                 'request_param' => [],
                 'response_param' => [],
