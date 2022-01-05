@@ -89,6 +89,11 @@ class DB extends PDO
     private $main_table;
     private $table;
     private $column;
+    private $single_column;
+
+    private $columns;
+    private $group_columns;
+    private $group_in_columns;
 
     /**
      * DB constructor.
@@ -206,26 +211,26 @@ class DB extends PDO
         $tag = 0;
         $function = 0;
         if ($sptag == 'having') {
-            $type = $sptag;
+            $type = strtoupper($sptag);
             $return = $this->whereReturn($return, $type, ' ' . $sptag . ' ');
         } else {
-            $type = 'where';
+            $type = 'WHERE';
         }
         foreach ($where as $key => $value) {
             $function = 0;
             $key_function = 0;
 
             if (empty($key) || is_numeric($key)) {
-                $key = 'and';
+                $key = 'AND';
             } else {
                 if (substr($key, 0, 1) === '#') {
                     $function = 1;
-                    $key = substr($key, 1, strlen($key));
+                    $key = substr($key, 1);
                 }
 
                 if (substr($key, 0, 1) === '@') {
                     $key_function = 1;
-                    $key = substr($key, 1, strlen($key));
+                    $key = substr($key, 1);
                 }
 
                 $key = explode('#', $key);
@@ -240,34 +245,36 @@ class DB extends PDO
                 1 => array('or', 'and'),
                 2 => array('like', 'having')
             );
-            if (!in_array(strtolower($key), $types[0])) {
+
+            $key = strtolower($key);
+            if (!in_array($key, $types[0])) {
                 if ($tag == 0) {
                     $tag = 1;
                 } else {
-                    $return = $this->whereReturn($return, $type, ' ' . $connect . ' ');
+                    $return = $this->preWhere($return, $type, ' ' . $connect . ' ');
                 }
             }
-            if (in_array(strtolower($key), $typearray[1])) {
-                if ($start != 1 || strtolower($key) == 'or') {
-                    $return = $this->wherereturn($return, $type, '(');
+            if (in_array($key, $types[1])) {
+                if ($start != 1 || $key == 'or') {
+                    $return = $this->preWhere($return, $type, '(');
                 }
-                $tempreturn = $this->wheresql($value, $key, $sptag);
-                foreach ($tempreturn as $tempkey => $tempvalue) {
-                    $return[$tempkey] .= $tempreturn[$tempkey];
+                $temp_return = $this->whereSql($value, $key, $sptag);
+                foreach ($temp_return as $temp_key => $temp_value) {
+                    $return[$temp_key] .= $temp_value;
                 }
-                if ($start != 1 || strtolower($key) == 'or') {
-                    $return = $this->wherereturn($return, $type, ')');
+                if ($start != 1 || $key == 'or') {
+                    $return = $this->preWhere($return, $type, ')');
                 }
-            } else if (in_array(strtolower($key), $typearray[2])) {
-                $tempreturn = $this->wheresql($value, 'and', $key, $start);
-                foreach ($tempreturn as $tempkey => $tempvalue) {
-                    $return[$tempkey] .= $tempreturn[$tempkey];
+            } else if (in_array($key, $types[2])) {
+                $temp_return = $this->whereSql($value, 'and', $key, $start);
+                foreach ($temp_return as $temp_key => $temp_value) {
+                    $return[$temp_key] .= $temp_value;
                 }
             } else {
                 switch ($key) {
                     case 'match':
-                        $content = array('match (' . implode(',', $this->fixcolumn($value['columns'])) . ') against (', array($value['keyword']), ')');
-                        $return = $this->wherereturn($return, $type, $content);
+                        $content = array('MATCH (' . implode(',', $this->fixColumn($value['columns'])) . ') AGAINST (', array($value['keyword']), ')');
+                        $return = $this->preWhere($return, $type, $content);
                         break;
                     case 'grouporder':
                     case 'gorder':
@@ -493,19 +500,18 @@ class DB extends PDO
         return $return;
     }
 
-    private function fixcolumn($column)
+    private function fixColumn($column)
     {
         if (is_array($column)) {
             foreach ($column as &$value) {
-                $value = $this->fixcolumn($value);
+                $value = $this->fixColumn($value);
             }
             return $column;
         } else {
             if (substr($column, 0, 1) != '@') {
                 preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?$#', $column, $columns);
                 if (!empty($columns[3])) {
-                    unset($columns[0]);
-                    unset($columns[1]);
+                    unset($columns[0], $columns[1]);
                     if (!array_key_exists($columns[3], $this->column)) {
                         $columns[3] = $this->config['prefix'] . $columns[3];
                     }
@@ -555,24 +561,24 @@ class DB extends PDO
         return $return;
     }
 
-    private function wherereturn($return, $type, $content)
+    private function preWhere($return, $type, $content)
     {
         if (is_array($content)) {
             foreach ($content as $value) {
                 if (!is_array($value)) {
                     $return[$type] .= $value;
                     if ($this->config['prepare'] == 1) {
-                        $return['pre' . $type] .= $value;
+                        $return['pre_' . $type] .= $value;
                     }
                 } else {
                     if (isset($value['type'])) {
                         $data = $this->checkvalue($value['value'], $value['type']);
                         if ($this->config['prepare'] == 1) {
                             if (empty($value['type'])) {
-                                $return['pre' . $type] .= $data['value'];
+                                $return['pre_' . $type] .= $data['value'];
                             } else {
-                                $this->prearray[] = $data['prevalue'];
-                                $return['pre' . $type] .= '?';
+                                $this->pre_array[] = $data['prevalue'];
+                                $return['pre_' . $type] .= '?';
                             }
                         }
                     } else {
@@ -582,7 +588,7 @@ class DB extends PDO
                             }
                         } else {
                             $data = $this->checkvalue(current($value));
-                            $return['pre' . $type] .= $data['value'];
+                            $return['pre_' . $type] .= $data['value'];
                         }
                     }
                     $return[$type] .= $data['value'];
@@ -591,7 +597,7 @@ class DB extends PDO
         } else {
             $return[$type] .= $content;
             if ($this->config['prepare'] == 1) {
-                $return['pre' . $type] .= $content;
+                $return['pre_' . $type] .= $content;
             }
         }
         return $return;
@@ -630,6 +636,11 @@ class DB extends PDO
         return $return;
     }
 
+    /**
+     * 获取数据表字段
+     * @param $table
+     * @param int $note
+     */
     public function getColumn($table, $note = 0)
     {
         $table = explode(',', $table);
@@ -642,7 +653,7 @@ class DB extends PDO
             preg_match('#^(`)?([^\(`]*)(`)?(\(([^\)]*)\))?$#', $table, $tables);
             $table = $this->config['prefix'] . $tables[2];
             if (empty($this->column[$table])) {
-                $sql = 'show full fields from `' . $table . '`';
+                $sql = 'SHOW FULL FIELDS FROM `' . $table . '`';
                 $column = $this->query($sql);
                 if (!empty($tables[5])) {
                     $table = $tables[5];
@@ -700,7 +711,7 @@ class DB extends PDO
                 $this->$name .= ',' . $table;
             }
             if (!empty($tables[5])) {
-                $this->$name .= ' as ' . $tables[5];
+                $this->$name .= ' AS ' . $tables[5];
             }
             if (empty($this->main_table)) {
                 $this->main_table = empty($tables[5]) ? $tables[2] : $tables[5];
@@ -717,136 +728,134 @@ class DB extends PDO
         foreach ($join as $key => $value) {
             $this->join .= ' ';
             preg_match('#^(\[([^\]]*)\])?(`)?([^\(`]*)(`)?(\(([^\)]*)\))?$#', $key, $keys);
-            $this->getcolumn($keys[3] . $keys[4] . $keys[5] . $keys[6]);
+            $this->getColumn($keys[3] . $keys[4] . $keys[5] . $keys[6]);
             if (!empty($keys[2])) {
                 switch ($keys[2]) {
                     case '>':
                         $this->join .= 'LEFT';
                         break;
                     case '<':
-                        $this->join .= 'right';
+                        $this->join .= 'RIGHT';
                         break;
                     case '<>':
-                        $this->join .= 'full';
+                        $this->join .= 'FULL';
                         break;
                     case '><':
-                        $this->join .= 'inner';
+                        $this->join .= 'INNER';
                         break;
                 }
                 $this->join .= ' ';
             }
             $keys[4] = '`' . $this->config['prefix'] . $keys[4] . '`';
-            $this->join .= 'join ' . $keys[4];
+            $this->join .= 'JOIN ' . $keys[4];
             if (!empty($keys[7])) {
-                $this->join .= ' as ' . $keys[7];
+                $this->join .= ' AS ' . $keys[7];
                 $keys[4] = $keys[7];
             }
             if (key($value) != '0') {
                 $joins = '';
                 $join_num = 1;
-                foreach ($value as $sunkey => $sunvalue) {
+                foreach ($value as $sun_key => $sun_value) {
                     if ($join_num > 1) {
-                        $joins .= ' and ';
+                        $joins .= ' AND ';
                     }
-                    preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $sunkey, $sunkeys);
-                    if (!empty($sunkeys[3])) {
-                        $table = $sunkeys[3];
-                    } else {
-                        $table = $this->maintable;
+                    preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $sun_key, $sun_keys);
+                    $table = $this->main_table;
+                    if (!empty($sun_keys[3])) {
+                        $table = $sun_keys[3];
                     }
-                    $joins .= $table . '.' . $this->removal($sunkeys[7]) . '=';
-                    preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $sunvalue, $sunvalues);
-                    if (!empty($sunvalues[3])) {
-                        $table = $sunvalues[3];
-                    } else {
-                        $table = $keys[4];
+                    $joins .= $table . '.' . $this->removal($sun_keys[7]) . '=';
+                    preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $sun_value, $sun_values);
+                    $table = $keys[4];
+                    if (!empty($sun_values[3])) {
+                        $table = $sun_values[3];
                     }
-                    $joins .= $table . '.' . $this->removal($sunvalues[7]);
+                    $joins .= $table . '.' . $this->removal($sun_values[7]);
                     $join_num++;
                 }
-                $this->join .= ' on ' . $joins;
+                $this->join .= ' ON ' . $joins;
             } else {
-                $this->join .= ' using (' . implode(',', $value) . ')';
+                $this->join .= ' USING (' . implode(',', $value) . ')';
             }
         }
     }
 
+    /**
+     * 返回
+     * @param $value
+     * @return string
+     */
     private function removal($value)
     {
         $value = '`' . preg_replace("#^'([^']*)'$#", '$1', $value) . '`';
         return $value;
     }
 
+    /**
+     * 预处理查询字段
+     * @param $columns
+     * @return bool
+     */
     private function columns($columns)
     {
-        $this->singlecolumn = false;
+        $this->single_column = false;
         if (is_array($columns) && count($columns) == 1) {
             $columns = current($columns);
         }
         if ($columns == '*' || $columns == '') {
             $this->columns = '*';
-            $this->groupcolumns = '*';
-            $this->groupincolumns = '*';
-        } else {
-            if (!is_array($columns)) {
-                if ($columns[0] == '#') {
-                    $this->singlecolumn = true;
-                    $columns = explode(',', $columns);
-                } else {
-                    $columns = explode(',', $columns);
-                    if (count($columns) == 1) {
-                        $tempcolumn = explode('.*', $columns[0]);
-                        if (count($tempcolumn) == 1) {
-                            $this->singlecolumn = true;
-                        }
-                    }
-                }
-            }
-            $columnlist = array();
-            $groupcolumnlist = array();
-            $groupincolumnlist = array();
-            foreach ($columns as $column) {
-                $value = explode('#', $column);
-                if (count($value) == 2) {
-                    $value = $value[1];
-                    preg_match('#^([^\[]*)(\[([^\]]*)\])?$#', $value, $values);
-                    $as = $values[3];
-                    $temp = $values[1];
-                } else {
-                    $value = $value[0];
-                    preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $value, $values);
-                    $as = $values[10];
-                    unset($values[0]);
-                    unset($values[1]);
-                    unset($values[9]);
-                    unset($values[10]);
-                    if (!empty($values[3])) {
-                        if (!array_key_exists($values[3], $this->column)) {
-                            $values[3] = $this->config['prefix'] . $values[3];
-                        }
-                    }
-                    $temp = implode('', $values);
-                }
-                if (!empty($as)) {
-                    $temp .= ' as ' . $as;
-                }
-                $columnlist[] = $temp;
-                $value = explode('#', $column);
-                if (count($value) == 2) {
-                    $groupcolumnlist[] = $temp;
-                } else {
-                    $groupincolumnlist[] = $temp;
-                    if (!empty($as)) {
-                        $groupcolumnlist[] = $as;
-                    } else {
-                        $groupcolumnlist[] = $temp;
-                    }
-                }
-            }
-            $this->columns = implode(',', $columnlist);
-            $this->groupincolumns = implode(',', $groupincolumnlist);
-            $this->groupcolumns = implode(',', $groupcolumnlist);
+            $this->group_columns = '*';
+            $this->group_in_columns = '*';
+            return true;
         }
+
+        if (!is_array($columns)) {
+            $columns = explode(',', $columns);
+            if ($columns[0] == '#') {
+                $this->single_column = true;
+            }
+            if (count($columns) == 1 && count(explode('.*', $columns[0])) == 1) {
+                $this->single_column = true;
+            }
+        }
+        $column_list = array();
+        $group_column_list = array();
+        $group_in_column_list = array();
+        foreach ($columns as $column) {
+            $value = explode('#', $column);
+            if (count($value) == 2) {
+                $column = $value[1];
+                preg_match('#^([^\[]*)(\[([^\]]*)\])?$#', $column, $values);
+                $as = $values[3];
+                $temp = $values[1];
+            } else {
+                $column = $value[0];
+                preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $column, $values);
+                $as = $values[10];
+                unset($values[0], $values[1], $values[9], $values[10]);
+                if (!empty($values[3])) {
+                    if (!array_key_exists($values[3], $this->column)) {
+                        $values[3] = $this->config['prefix'] . $values[3];
+                    }
+                }
+                $temp = implode('', $values);
+            }
+
+            if (!empty($as)) {
+                $temp .= ' AS ' . $as;
+            }
+            $column_list[] = $temp;
+            if (count($value) == 2) {
+                $group_column_list[] = $temp;
+            } else {
+                $group_in_column_list[] = $temp;
+                $group_in_column_list[] = empty($as) ? $temp : $as;
+            }
+        }
+        $this->columns = implode(',', $column_list);
+        $this->group_in_columns = implode(',', $group_in_column_list);
+        $this->group_columns = implode(',', $group_column_list);
+        return true;
     }
 
     public function catche($e)
@@ -1182,7 +1191,6 @@ class DB extends PDO
      */
     public function select($table, $join = [], $columns = [], $where = [])
     {
-        //参数处理
         $this->init();
         $this->table($table);
         if (is_array($join)) {
@@ -1190,19 +1198,21 @@ class DB extends PDO
                 $joins = substr(key($join), 0, 1);
             }
         }
+
+
         if (isset($joins) && $joins == '[') {
             $this->join($join);
         } else {
             $where = $columns;
             $columns = $join;
         }
-        $this->getcolumn($table);
+        $this->getColumn($table);
         $this->columns($columns);
-        if (array_key_exists('isdel', $this->column[$this->main_table]) && $this->config['realdelete'] == 0) {
+        if (array_key_exists('del', $this->column[$this->main_table]) && $this->config['real_delete'] == 0) {
             if (!empty($where)) {
-                $where[$this->main_table . '.isdel[!]'] = 1;
+                $where[$this->main_table . '.del[!]'] = 1;
             } else {
-                $where = array('isdel[!]' => 1);
+                $where = array('del[!]' => 1);
             }
         }
         if (!empty($where)) {

@@ -33,7 +33,7 @@ if ($this->checkthisapi()) {
     $join = [
         '[>]department_job(dj)' => ['d.tbid' => 'dj.department_id']
     ];
-    $column = ['dj.name','dj.type'];
+    $column = ['dj.name[dname]','dj.type[dtype]'];
     $this->db->get('department(d)', $join, $column, $set);
     // $that->get_join_list();
     //输出返回数据
