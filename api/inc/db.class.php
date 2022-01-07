@@ -241,7 +241,7 @@ class DB extends PDO
             }
 
             $types = array(
-                0 => array('order', 'grouporder', 'gorder', 'having', 'group', 'limit'),
+                0 => array('order', 'having', 'group', 'limit'),
                 1 => array('or', 'and'),
                 2 => array('like', 'having')
             );
@@ -276,8 +276,8 @@ class DB extends PDO
                         $content = array('MATCH (' . implode(',', $this->fixColumn($value['columns'])) . ') AGAINST (', array($value['keyword']), ')');
                         $return = $this->preWhere($return, $type, $content);
                         break;
-                    case 'grouporder':
-                    case 'gorder':
+                    // case 'grouporder':
+                    // case 'gorder':
                     case 'order':
                         if (!is_array($value)) {
                             if (substr($value, 0, 1) != '@') {
@@ -287,35 +287,35 @@ class DB extends PDO
                             }
                         }
                         $order = '';
-                        foreach ($value as $orderkey => $ordervalue) {
-                            if (is_numeric($orderkey)) {
-                                if (substr($ordervalue, 0, 1) != '@') {
-                                    $ordervalue = explode(' ', $ordervalue);
-                                    $order .= ' ' . $this->fixcolumn($ordervalue[0]) . ' ' . $ordervalue[1] . ',';
+                        foreach ($value as $order_key => $order_value) {
+                            if (is_numeric($order_key)) {
+                                if (substr($order_value, 0, 1) != '@') {
+                                    $order_value = explode(' ', $order_value);
+                                    $order .= ' ' . $this->fixColumn($order_value[0]) . ' ' . $order_value[1] . ',';
                                 } else {
-                                    $order .= ' ' . substr($ordervalue, 1, strlen($ordervalue)) . ',';
+                                    $order .= ' ' . substr($order_value, 1, strlen($order_value)) . ',';
                                 }
                             } else {
-                                if (substr($orderkey, 0, 1) != '@') {
-                                    $order .= ' ' . $this->fixcolumn($orderkey) . ' ' . $ordervalue . ',';
+                                if (substr($order_key, 0, 1) != '@') {
+                                    $order .= ' ' . $this->fixColumn($order_key) . ' ' . $order_value . ',';
                                 } else {
-                                    $order .= ' ' . substr($orderkey, 1, strlen($orderkey)) . ' ' . $ordervalue . ',';
+                                    $order .= ' ' . substr($order_key, 1, strlen($order_key)) . ' ' . $order_value . ',';
                                 }
                             }
                         }
                         $order = substr($order, 0, strlen($order) - 1);
-                        $return[$key] .= ' order by' . $order;
+                        $return[$key] .= ' ORDER BY' . $order;
                         break;
                     case 'group':
-                        $value = $this->fixcolumn($value);
+                        $value = $this->fixColumn($value);
                         if (is_array($value)) {
-                            $groupvalue = reset($value);
+                            $group_value = reset($value);
                             $value = implode(',', $value);
                         } else {
-                            $groupvalue = $value;
+                            $group_value = $value;
                         }
-                        $return['group'] .= ' group by ' . $value;
-                        $this->groupvalue = $groupvalue;
+                        $return['group'] .= ' GROUP BY ' . $value;
+                        $this->group_value = $group_value;
                         break;
                     case 'limit':
                         if (is_array($value)) {
@@ -331,30 +331,30 @@ class DB extends PDO
                         } else {
                             $limit = $value;
                         }
-                        $return['limit'] .= ' limit ' . $limit;
+                        $return['limit'] .= ' LIMIT ' . $limit;
                         break;
                     default:
-                        if ($keyfunction == 1) {
+                        if ($key_function == 1) {
                             preg_match('#^(@)?([^\[]*)(\[([^\]]*)\])?$#', $key, $keys);
                             $table = '';
-                            $wherekey = $keys[2];
-                            $wheretag = $keys[4];
+                            $where_key = $keys[2];
+                            $where_tag = $keys[4];
                             if ($function == 0) {
-                                $keytype = 1;
+                                $key_type = 1;
                             } else {
                                 if ($keys[1] == '@') {
-                                    $keytype = 1;
+                                    $key_type = 1;
                                 } else {
-                                    $keytype = '';
+                                    $key_type = '';
                                 }
                             }
                         } else {
                             preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([^\]]*)\])?$#', $key, $keys);
                             $table = $keys[3];
-                            $wheretag = $keys[10];
-                            $wherekey = $keys[7];
+                            $where_tag = $keys[10];
+                            $where_key = $keys[7];
                             if (empty($table)) {
-                                $tables = $this->maintable;
+                                $tables = $this->main_table;
                             } else {
                                 if (!array_key_exists($table, $this->column)) {
                                     $table = $this->config['prefix'] . $table;
@@ -362,34 +362,34 @@ class DB extends PDO
                                 $tables = $table;
                             }
                             if ($function == 0) {
-                                $keytype = $this->column[$tables][$wherekey]['type'];
+                                $key_type = $this->column[$tables][$where_key]['type'];
                             } else {
-                                $keytype = '';
+                                $key_type = '';
                             }
-                            $wherekey = '`' . $wherekey . '`';
+                            $where_key = '`' . $where_key . '`';
                         }
-                        if (!empty($tables) && $keyfunction != 1 && !empty($this->join)) {
-                            $content = '`' . $tables . '`.' . $wherekey;
+                        if (!empty($tables) && $key_function != 1 && !empty($this->join)) {
+                            $content = '`' . $tables . '`.' . $where_key;
                         } else {
-                            $content = $wherekey;
+                            $content = $where_key;
                         }
-                        $return = $this->wherereturn($return, $type, $content);
-                        if (!empty($wheretag)) {
-                            switch ($wheretag) {
+                        $return = $this->preWhere($return, $type, $content);
+                        if (!empty($where_tag)) {
+                            switch ($where_tag) {
                                 case '!':
                                     if (is_array($value) && empty($value)) {
                                         $value = 'null';
                                     }
                                     if (is_array($value)) {
                                         $content = array();
-                                        $content[] = ' not in (';
+                                        $content[] = ' NOT IN (';
                                         $content[] = $this->arraytoreturn($value, $keytype, ',');
                                         $content[] = ')';
-                                        $return = $this->wherereturn($return, $type, $content);
+                                        $return = $this->preWhere($return, $type, $content);
                                     } else {
                                         if ($value === 'null' || gettype($value) == 'NULL') {
-                                            $content = array(" is not null");
-                                            $return = $this->wherereturn($return, $type, $content);
+                                            $content = array(" IS NOT NULL");
+                                            $return = $this->preWhere($return, $type, $content);
                                         } else {
                                             $content = array();
                                             $content[] = ' !';
@@ -500,6 +500,11 @@ class DB extends PDO
         return $return;
     }
 
+    /**
+     * 处理字段前缀
+     * @param $column
+     * @return array|false|string
+     */
     private function fixColumn($column)
     {
         if (is_array($column)) {
@@ -507,25 +512,25 @@ class DB extends PDO
                 $value = $this->fixColumn($value);
             }
             return $column;
-        } else {
-            if (substr($column, 0, 1) != '@') {
-                preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?$#', $column, $columns);
-                if (!empty($columns[3])) {
-                    unset($columns[0], $columns[1]);
-                    if (!array_key_exists($columns[3], $this->column)) {
-                        $columns[3] = $this->config['prefix'] . $columns[3];
-                    }
-                    return implode('', $columns);
-                } else {
-                    if (!empty($this->join)) {
-                        $column = $this->maintable . '.' . $column;
-                    }
-                    return $column;
-                }
-            } else {
-                return substr($column, 1, strlen($column));
-            }
         }
+
+        if (substr($column, 0, 1) != '@') {
+            preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?$#', $column, $columns);
+            if (!empty($columns[3])) {
+                unset($columns[0], $columns[1]);
+                if (!array_key_exists($columns[3], $this->column)) {
+                    $columns[3] = $this->config['prefix'] . $columns[3];
+                }
+                return implode('', $columns);
+            }
+
+            if (!empty($this->join)) {
+                $column = $this->main_table . '.' . $column;
+            }
+            return $column;
+        }
+
+        return substr($column, 1, strlen($column));
     }
 
     private function checkilikevalue($value)
