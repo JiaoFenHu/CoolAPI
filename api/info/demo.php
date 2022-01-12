@@ -27,14 +27,18 @@ if ($this->checkthisapi()) {
 
     // $data['hashId'] = $hashIds->getHashIdString($param['id'], $param['length'], $param['mode'], $param['pattern']);
     $set = [
-        'd.account' => '17610062223',
-        'd.password' => '123123'
+        'd.manager' => '17610062223',
+        'd.name[!]' => '123123',
+        'd.name[~]' => '123123%',
+        's_group' => 'd.name',
+        'order' => ['did' => 'DESC'],
+        'having' => ['#@count(d.name)[>=]' => 2]
     ];
     $join = [
         '[>]department_job(dj)' => ['d.tbid' => 'dj.department_id']
     ];
-    $column = ['dj.name[dname]','dj.type[dtype]'];
-    $this->db->get('department(d)', $join, $column, $set);
+    $column = ['d.name[dname]','d.type[dtype]', 'd.tbid[did]'];
+    $this->db->select('department(d)', $join, $column, $set);
     // $that->get_join_list();
     //输出返回数据
     $this->echodata($data);

@@ -4,7 +4,7 @@
  * 作者：陈志平
  * 日期：2014/07/23
  * 电邮：235437507@qq.com
- * 版本：V1.33
+ * 版本：V2.0
  * 更新时间：2019/12/7
  * 更新日志：
  * V1.1 解决group by多个元素的bug
@@ -41,6 +41,11 @@
  * v1.32 修复浮点数入库int类型字段会丢失精度的问题
  * v1.33 修复join和group和function会添加表前缀的问题
  * v1.34 修改join联查on多条件问题
+ * v2.0
+ *  - 优化所有的方法；
+ *  - 优化group的使用方式，取消强制子查询group；
+ *  - group子查询条件bug修改；
+ *  - 严格遵守psr-4的代码规范；
  *
  * 待处理，连接设置sqlmode等
  */
@@ -94,6 +99,12 @@ class DB extends PDO
     private $columns;
     private $group_columns;
     private $group_in_columns;
+    private $group_where_column_list;
+    private $set;
+    private $sql;
+    private $join_tables;
+    private $current_set;
+    private $original_set;
 
     /**
      * DB constructor.
@@ -112,14 +123,17 @@ class DB extends PDO
      * 运行并存储query记录
      * @param string $sql
      * @param int $mode
+     * @param null $arg3
+     * @param array $ctorargs
      * @return false|PDOStatement
      */
-    public function query($sql, $mode = 0)
+    public function query($sql, $mode = 0, $arg3 = null, array $ctorargs = array())
     {
         $this->query_arr[] = $sql;
         if ($mode == 0) {
             return parent::query($sql);
         }
+        return true;
     }
 
     /**
@@ -188,12 +202,21 @@ class DB extends PDO
     {
         $this->group_value = array();
         $this->pre_array = array();
-        $this->join = array();
+        $this->join = '';
         $this->table = '';
         $this->main_table = '';
         $this->where = array();
+        $this->join_tables = array();
+        $this->group_where_column_list = array();
+        $this->current_set = array();
+        $this->original_set = array();
+        unset($this->config['sub_group']);
     }
 
+    /**
+     * 处理条件
+     * @param $where
+     */
     private function where($where)
     {
         $this->where = $this->whereSql($where, 'and', '', 1);
@@ -205,16 +228,23 @@ class DB extends PDO
         }
     }
 
+    /**
+     * 组装条件
+     * @param $where
+     * @param string $connect
+     * @param string $sptag
+     * @param int $start
+     * @return array|mixed
+     */
     private function whereSql($where, $connect = 'and', $sptag = '', $start = 0)
     {
         $return = array();
         $tag = 0;
-        $function = 0;
         if ($sptag == 'having') {
-            $type = strtoupper($sptag);
-            $return = $this->whereReturn($return, $type, ' ' . $sptag . ' ');
+            $type = $sptag;
+            $return = $this->preWhere($return, $type, ' ' . strtoupper($sptag) . ' ');
         } else {
-            $type = 'WHERE';
+            $type = 'where';
         }
         foreach ($where as $key => $value) {
             $function = 0;
@@ -241,7 +271,7 @@ class DB extends PDO
             }
 
             $types = array(
-                0 => array('order', 'having', 'group', 'limit'),
+                0 => array('order', 'g_order', 'group_order', 'having', 'group', 's_group', 'limit'),
                 1 => array('or', 'and'),
                 2 => array('like', 'having')
             );
@@ -276,8 +306,8 @@ class DB extends PDO
                         $content = array('MATCH (' . implode(',', $this->fixColumn($value['columns'])) . ') AGAINST (', array($value['keyword']), ')');
                         $return = $this->preWhere($return, $type, $content);
                         break;
-                    // case 'grouporder':
-                    // case 'gorder':
+                    case 'group_order':
+                    case 'g_order':
                     case 'order':
                         if (!is_array($value)) {
                             if (substr($value, 0, 1) != '@') {
@@ -306,7 +336,11 @@ class DB extends PDO
                         $order = substr($order, 0, strlen($order) - 1);
                         $return[$key] .= ' ORDER BY' . $order;
                         break;
+                    case 's_group':
                     case 'group':
+                        if ($key === 's_group') {
+                            $this->setConfig('sub_group', true);
+                        }
                         $value = $this->fixColumn($value);
                         if (is_array($value)) {
                             $group_value = reset($value);
@@ -336,7 +370,6 @@ class DB extends PDO
                     default:
                         if ($key_function == 1) {
                             preg_match('#^(@)?([^\[]*)(\[([^\]]*)\])?$#', $key, $keys);
-                            $table = '';
                             $where_key = $keys[2];
                             $where_tag = $keys[4];
                             if ($function == 0) {
@@ -383,7 +416,7 @@ class DB extends PDO
                                     if (is_array($value)) {
                                         $content = array();
                                         $content[] = ' NOT IN (';
-                                        $content[] = $this->arraytoreturn($value, $keytype, ',');
+                                        $content[] = $this->arrayToReturn($value, $key_type, ',');
                                         $content[] = ')';
                                         $return = $this->preWhere($return, $type, $content);
                                     } else {
@@ -393,79 +426,79 @@ class DB extends PDO
                                         } else {
                                             $content = array();
                                             $content[] = ' !';
-                                            if (!empty($wherekey)) {
+                                            if (!empty($where_key)) {
                                                 $content[] = '=';
                                             }
-                                            $content[] = array('type' => $keytype, 'value' => $value);
-                                            $return = $this->wherereturn($return, $type, $content);
+                                            $content[] = array('type' => $key_type, 'value' => $value);
+                                            $return = $this->preWhere($return, $type, $content);
                                         }
                                     }
                                     break;
                                 case '<>':
                                     $content = array();
-                                    $content[] = ' between ';
-                                    $content[] = array('type' => $keytype, 'value' => $value[0]);
-                                    $content[] = ' and ';
-                                    $content[] = array('type' => $keytype, 'value' => $value[1]);
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $content[] = ' BETWEEN ';
+                                    $content[] = array('type' => $key_type, 'value' => $value[0]);
+                                    $content[] = ' AND ';
+                                    $content[] = array('type' => $key_type, 'value' => $value[1]);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 case '><':
                                     $content = array();
-                                    $content[] = ' not between ';
-                                    $content[] = array('type' => $keytype, 'value' => $value[0]);
-                                    $content[] = ' and ';
-                                    $content[] = array('type' => $keytype, 'value' => $value[1]);
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $content[] = ' NOT BETWEEN ';
+                                    $content[] = array('type' => $key_type, 'value' => $value[0]);
+                                    $content[] = ' AND ';
+                                    $content[] = array('type' => $key_type, 'value' => $value[1]);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 case '~':
-                                    $value = $this->checkilikevalue($value);
+                                    $value = $this->getLikeValueToWhere($value);
                                     $content = array();
-                                    $content[] = " like '";
+                                    $content[] = " LIKE '";
                                     if (is_array($value)) {
-                                        $content[] = $this->arraytoreturn($value, '', ' or ');
+                                        $content[] = $this->arrayToReturn($value, '', ' OR ');
                                     } else {
                                         $content[] = array($value);
                                     }
                                     $content[] = "'";
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 case '!~':
-                                    $value = $this->checkilikevalue($value);
+                                    $value = $this->getLikeValueToWhere($value);
                                     $content = array();
-                                    $content[] = " not like '";
+                                    $content[] = " NOT LIKE '";
                                     if (is_array($value)) {
-                                        $content[] = $this->arraytoreturn($value, '', ' or ');
+                                        $content[] = $this->arrayToReturn($value, '', ' OR ');
                                     } else {
                                         $content[] = array($value);
                                     }
                                     $content[] = "'";
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 case '~~':
                                     $content = array();
-                                    $content[] = ' regexp ';
+                                    $content[] = ' REGEXP ';
                                     if (is_array($value)) {
-                                        $content[] = $this->arraytoreturn($value, '', ' or ');
+                                        $content[] = $this->arrayToReturn($value, '', ' OR ');
                                     } else {
                                         $content[] = array($value);
                                     }
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 case '!~~':
                                     $content = array();
-                                    $content[] = ' not regexp ';
+                                    $content[] = ' NOT REGEXP ';
                                     if (is_array($value)) {
-                                        $content[] = $this->arraytoreturn($value, '', ' or ');
+                                        $content[] = $this->arrayToReturn($value, '', ' OR ');
                                     } else {
                                         $content[] = array($value);
                                     }
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                                 default:
                                     $content = array();
-                                    $content[] = ' ' . $wheretag . ' ';
-                                    $content[] = array('type' => $keytype, 'value' => $value);
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $content[] = ' ' . $where_tag . ' ';
+                                    $content[] = array('type' => $key_type, 'value' => $value);
+                                    $return = $this->preWhere($return, $type, $content);
                                     break;
                             }
                         } else {
@@ -475,21 +508,21 @@ class DB extends PDO
                             if (is_array($value)) {
                                 $content = array();
                                 $content[] = ' in (';
-                                $content[] = $this->arraytoreturn($value, $keytype, ',');
+                                $content[] = $this->arrayToReturn($value, $key_type, ',');
                                 $content[] = ')';
-                                $return = $this->wherereturn($return, $type, $content);
+                                $return = $this->preWhere($return, $type, $content);
                             } else {
                                 if ($value === 'null' || gettype($value) == 'NULL') {
                                     $content = array(' is null');
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $return = $this->preWhere($return, $type, $content);
                                 } else {
                                     $content = array();
                                     $content[] = ' ';
-                                    if (!empty($wherekey)) {
+                                    if (!empty($where_key)) {
                                         $content[] = '= ';
                                     }
-                                    $content[] = array('type' => $keytype, 'value' => $value);
-                                    $return = $this->wherereturn($return, $type, $content);
+                                    $content[] = array('type' => $key_type, 'value' => $value);
+                                    $return = $this->preWhere($return, $type, $content);
                                 }
                             }
                         }
@@ -533,11 +566,16 @@ class DB extends PDO
         return substr($column, 1, strlen($column));
     }
 
-    private function checkilikevalue($value)
+    /**
+     * 处理like字段
+     * @param $value
+     * @return array|mixed|string
+     */
+    private function getLikeValueToWhere($value)
     {
         if (is_array($value)) {
             foreach ($value as &$v) {
-                $v = $this->checkilikevalue($v);
+                $v = $this->getLikeValueToWhere($v);
             }
         } else {
             $pattern = '#((?!\\\).)([%_])#';
@@ -548,17 +586,21 @@ class DB extends PDO
         return $value;
     }
 
-    private function arraytoreturn($array, $type = '', $connect = ',')
+    /**
+     * 处理数组连接
+     * @param $array
+     * @param string $type
+     * @param string $connect
+     * @return array
+     */
+    private function arrayToReturn($array, $type = '', $connect = ',')
     {
         $i = 0;
         $return = array();
+        $array_count = count($array);
         foreach ($array as $value) {
-            if (!empty($type)) {
-                $return[] = array('type' => $type, 'value' => $value);
-            } else {
-                $return[] = array($value);
-            }
-            if (!empty($connect) && $i != count($array) - 1) {
+            $return[] = !empty($type) ? array('type' => $type, 'value' => $value) : array($value);
+            if (!empty($connect) && $i != $array_count - 1) {
                 $return[] = $connect;
             }
             $i++;
@@ -566,6 +608,13 @@ class DB extends PDO
         return $return;
     }
 
+    /**
+     * 预处理where语句
+     * @param $return
+     * @param $type
+     * @param $content
+     * @return mixed
+     */
     private function preWhere($return, $type, $content)
     {
         if (is_array($content)) {
@@ -577,7 +626,7 @@ class DB extends PDO
                     }
                 } else {
                     if (isset($value['type'])) {
-                        $data = $this->checkvalue($value['value'], $value['type']);
+                        $data = $this->transformValue($value['value'], $value['type']);
                         if ($this->config['prepare'] == 1) {
                             if (empty($value['type'])) {
                                 $return['pre_' . $type] .= $data['value'];
@@ -588,11 +637,11 @@ class DB extends PDO
                         }
                     } else {
                         if (is_array(current($value))) {
-                            foreach ($value as $cvalue) {
-                                $return = $this->wherereturn($return, $type, array($cvalue));
+                            foreach ($value as $c_value) {
+                                $return = $this->preWhere($return, $type, array($c_value));
                             }
                         } else {
-                            $data = $this->checkvalue(current($value));
+                            $data = $this->transformValue(current($value));
                             $return['pre_' . $type] .= $data['value'];
                         }
                     }
@@ -608,32 +657,38 @@ class DB extends PDO
         return $return;
     }
 
-    private function checkvalue($value, $type = '')
+    /**
+     * 值转换
+     * @param $value
+     * @param string $type
+     * @return mixed
+     */
+    private function transformValue($value, $type = '')
     {
-        $stringtype = 0;
+        $string_type = 0;
         if ($value === null) {
             $value = 'null';
         }
         if ($value !== 'null') {
             if (!empty($type)) {
-                if (in_array($type, $this->intarray)) {
+                if (in_array($type, $this->int_array)) {
                     $value = number_format($value, 0, '.', '');
-                } else if (in_array($type, $this->floatarray)) {
+                } else if (in_array($type, $this->float_array)) {
                     $value = floatval($value);
                 } else {
-                    $stringtype = 1;
+                    $string_type = 1;
                 }
             } else {
-                $stringtype = 2;
+                $string_type = 2;
             }
-            if ($stringtype != 0) {
+            if ($string_type != 0) {
                 $value = preg_replace('#^([\'\"])([^\'\"]*)([\'\"])$#', "\$2", $value);
             }
         }
         if ($this->config['prepare'] == 1) {
-            $return['prevalue'] = $value;
+            $return['pre_value'] = $value;
         }
-        if ($stringtype == 1) {
+        if ($string_type == 1) {
             $return['value'] = "'" . $value . "'";
         } else {
             $return['value'] = $value;
@@ -720,6 +775,7 @@ class DB extends PDO
             }
             if (empty($this->main_table)) {
                 $this->main_table = empty($tables[5]) ? $tables[2] : $tables[5];
+                $this->join_tables[] = $this->main_table;
             }
         }
     }
@@ -753,9 +809,11 @@ class DB extends PDO
             }
             $keys[4] = '`' . $this->config['prefix'] . $keys[4] . '`';
             $this->join .= 'JOIN ' . $keys[4];
+            $this->join_tables[] = $keys[4];
             if (!empty($keys[7])) {
                 $this->join .= ' AS ' . $keys[7];
                 $keys[4] = $keys[7];
+                $this->join_tables[] = $keys[7];
             }
             if (key($value) != '0') {
                 $joins = '';
@@ -846,7 +904,9 @@ class DB extends PDO
                 $temp = implode('', $values);
             }
 
+            $this->group_where_column_list[$temp] = $temp;
             if (!empty($as)) {
+                $this->group_where_column_list[$temp] = $as;
                 $temp .= ' AS ' . $as;
             }
             $column_list[] = $temp;
@@ -854,7 +914,7 @@ class DB extends PDO
                 $group_column_list[] = $temp;
             } else {
                 $group_in_column_list[] = $temp;
-                $group_in_column_list[] = empty($as) ? $temp : $as;
+                $group_column_list[] = empty($as) ? $temp : $as;
             }
         }
         $this->columns = implode(',', $column_list);
@@ -863,77 +923,53 @@ class DB extends PDO
         return true;
     }
 
-    public function catche($e)
-    {
-        if ($this->inTransaction()) {
-            $this->rollBack();
-        }
-        if (error_reporting() != 0) {
-            if ($e->xdebug_message != '') {
-                $message = '<font size="1"><table cellspacing="0" cellpadding="1" border="1" dir="ltr" class="xdebug-error">' . $e->xdebug_message . '</table></font>';
-            } else {
-                $message = $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine() . '<br>Stack trace:<br>';
-                $trace = $e->getTrace();
-                foreach ($trace as $key => $value) {
-                    $message .= '#' . $key . ' ' . $value['file'] . '(' . $value['line'] . '): ' . $value['class'] . $value['type'] . $value['function'] . '()<br>';
-                }
-            }
-            echo $message;
-        }
-    }
-
-
     /**
      * 将数据库报错保存日志，前台显示非敏感错误！
      * @param $e
-     * @param $api_name
-     * @throws Exception
+     * @param string $mode
      */
-    public function TransactionErrorLog($e, $api_name)
+    public function TransactionErrorLog($e, $mode = '')
     {
         if ($this->inTransaction()) {
             $this->rollBack();
         }
         if (error_reporting() != 0) {
-
-            $message = $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine();
-            $message .= 'Stack trace:';
+            $message = $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine() . PHP_EOL;
+            $message .= 'Stack trace:' . PHP_EOL;
             $trace = $e->getTrace();
             foreach ($trace as $key => $value) {
-                $message .= '#' . $key . ' ' . $value['file'] . '(' . $value['line'] . '): ' . $value['class'] . $value['type'] . $value['function'] . '()';
+                $message .= '#' . $key . ' ' . $value['file'] . '(' . $value['line'] . '): ' . $value['class'] . $value['type'] . $value['function'] . '()' . PHP_EOL;
             }
-
-            require_once(API_DIR . 'info/monolog.class.php');
-            $log_class = new monolog(1);
-            $err_clog = $log_class::init('DBErrorLog', $api_name, 'ERROR');
-            $err_clog->error($message);
         }
     }
 
-    private function columnset($set)
+    /**
+     * 设置新增，更新字段
+     * @param $set
+     */
+    private function columnSet($set)
     {
         $this->set = array();
-        $this->set = $this->wherereturn($this->set, 'set', ' set ');
+        $this->set = $this->preWhere($this->set, 'set', ' set ');
         $i = 0;
         foreach ($set as $key => $value) {
-            if (substr($key, 0, 1) != '#') {
-                $function = 0;
-            } else {
+            $function = 0;
+            $key_function = 0;
+            if (substr($key, 0, 1) === '#') {
                 $function = 1;
                 $key = substr($key, 1, strlen($key));
             }
-            if (substr($key, 0, 1) != '@') {
-                $keyfunction = 0;
-            } else {
-                $keyfunction = 1;
+            if (substr($key, 0, 1) === '@') {
+                $key_function = 1;
                 $key = substr($key, 1, strlen($key));
             }
-            if ($keyfunction == 1) {
+
+            if ($key_function == 1) {
                 preg_match('#^([^\[]*)(\[([^\]]*)\])?$#', $key, $keys);
                 $table = '';
-                $setkey = $keys[1];
-                $settag = $keys[3];
-                $keytype = '';
+                $set_key = $keys[1];
+                $set_tag = $keys[3];
+                $key_type = '';
             } else {
                 preg_match('#^(\(JSON\))?((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?(\[([\+\-\*\/])\])?$#i', $key, $keys);
                 if (is_array($value)) {
@@ -943,111 +979,99 @@ class DB extends PDO
                         $value = serialize($value);
                     }
                 }
-                if (!empty($keys[4])) {
-                    $table = $keys[4];
-                } else {
-                    $table = $this->maintable;
-                }
+
                 $table = $keys[4];
-                $setkey = $keys[8];
-                $settag = $keys[11];
+                $set_key = $keys[8];
+                $set_tag = $keys[11];
                 if ($function == 0) {
-                    if (empty($table)) {
-                        $tables = $this->maintable;
-                    } else {
-                        $tables = $table;
-                    }
-                    $keytype = $this->column[$tables][$setkey]['type'];
+                    $tables = empty($table) ? $this->main_table : $table;
+                    $key_type = $this->column[$tables][$set_key]['type'];
                 } else {
-                    $keytype = '';
+                    $key_type = '';
                 }
-                $setkey = '`' . $setkey . '`';
+                $set_key = '`' . $set_key . '`';
             }
-            if (!empty($table)) {
-                $contents = '`' . $table . '`.' . $setkey;
-            } else {
-                $contents = $setkey;
-            }
+            $contents = empty($table) ? $set_key : '`' . $table . '`.' . $set_key;
             $content = array();
             $content[] = $contents . ' = ';
             if (!empty($settag)) {
                 $content[] = $contents . ' ' . $settag . ' ';
             }
-            $content[] = array('type' => $keytype, 'value' => $value);
+            $content[] = array('type' => $key_type, 'value' => $value);
             if ($i != count($set) - 1) {
                 $content[] = ', ';
             }
-            $this->set = $this->wherereturn($this->set, 'set', $content);
+            $this->set = $this->preWhere($this->set, 'set', $content);
             $i++;
         }
     }
 
-    private function copyset($set)
+    /**
+     * copy条件设置
+     * @param $set
+     */
+    private function copySet($set)
     {
-        $this->cset = array();
-        $this->ocset = array();
         if (!is_array($set)) {
             $set = explode(',', $set);
         }
         foreach ($set as $key => $value) {
             if (is_numeric($key)) {
-                $set = $this->copycolumnset($value);
-                $this->cset[] = $set;
-                $this->ocset[] = $set;
+                $set = $this->copyColumnSet($value);
+                $this->current_set[] = $set;
+                $this->original_set[] = $set;
             } else {
-                $this->cset[] = $this->copycolumnset($key);
-                $this->ocset[] = $this->copycolumnset($value);
+                $this->current_set[] = $this->copyColumnSet($key);
+                $this->original_set[] = $this->copyColumnSet($value);
             }
         }
-        $this->cset = '(' . implode(',', $this->cset) . ')';
-        $this->ocset = implode(',', $this->ocset);
+        $this->current_set = '(' . implode(',', $this->current_set) . ')';
+        $this->original_set = implode(',', $this->original_set);
     }
 
-    private function copycolumnset($key)
+    /**
+     * copy字段设置
+     * @param $key
+     * @return mixed|string
+     */
+    private function copyColumnSet($key)
     {
-        if (substr($key, 0, 1) != '#') {
-            $function = 0;
-        } else {
+        $function = 0;
+        $key_function = 0;
+        if (substr($key, 0, 1) === '#') {
             $function = 1;
             $key = substr($key, 1, strlen($key));
         }
-        if (substr($key, 0, 1) != '@') {
-            $keyfunction = 0;
-        } else {
-            $keyfunction = 1;
+        if (substr($key, 0, 1) === '@') {
+            $key_function = 1;
             $key = substr($key, 1, strlen($key));
         }
-        if ($keyfunction == 1) {
+
+        if ($key_function == 1) {
             preg_match('#^([^\[]*)(\[([^\]]*)\])?$#', $key, $keys);
             $table = '';
-            $setkey = $keys[1];
-            $settag = $keys[3];
+            $set_key = $keys[1];
+            $set_tag = $keys[3];
         } else {
             preg_match('#^((`)?([^\.`]*)(`)?(\.))?(`)?([^\[`]*)(`)?$#i', $key, $keys);
-            if (!empty($keys[3])) {
-                $table = $keys[3];
-            } else {
-                $table = $this->maintable;
-            }
             $table = $keys[3];
-            $setkey = $keys[7];
+            $set_key = $keys[7];
             if ($function == 0) {
-                if (empty($table)) {
-                    $tables = $this->maintable;
-                } else {
-                    $tables = $table;
-                }
+                $tables = empty($table) ? $this->main_table : $table;
             }
-            $setkey = '`' . $setkey . '`';
+            $set_key = '`' . $set_key . '`';
         }
         if (!empty($table)) {
-            return '`' . $table . '`.' . $setkey;
-        } else {
-            return $setkey;
+            return '`' . $table . '`.' . $set_key;
         }
+        return $set_key;
     }
 
-    private function doquery($mode)
+    /**
+     * 执行sql语句
+     * @param $mode
+     */
+    private function doQuery($mode)
     {
         if ($this->config['debug'] != 0) {
             echo $this->assembling($mode) . ';';
@@ -1061,8 +1085,8 @@ class DB extends PDO
             $this->sql = $this->assembling($mode);
             $this->query($this->sql, 1);
             $i = 1;
-            if (!empty($this->prearray)) {
-                foreach ($this->prearray as $value) {
+            if (!empty($this->pre_array)) {
+                foreach ($this->pre_array as $value) {
                     if ($value === 'null') {
                         $value = null;
                     }
@@ -1081,13 +1105,20 @@ class DB extends PDO
         }
     }
 
+    /**
+     * sql组装
+     * @param $mode
+     * @param int $prepare
+     * @return string
+     */
     private function assembling($mode, $prepare = 0)
     {
+        $where = "";
         if ($prepare == 1) {
             if ($mode != 'insert') {
-                $where = !empty($this->where['prewhere']) ? $this->where['prewhere'] : '';
+                $where = !empty($this->where['pre_where']) ? $this->where['pre_where'] : '';
             }
-            $set = $this->set['preset'];
+            $set = $this->set['pre_set'];
         } else {
             if ($mode != 'insert') {
                 $where = !empty($this->where['where']) ? $this->where['where'] : '';
@@ -1097,88 +1128,123 @@ class DB extends PDO
         $this->where['order'] = !empty($this->where['order']) ? $this->where['order'] : '';
         switch ($mode) {
             case 'get':
-                $this->where['limit'] = ' limit 0,1';
+                $this->where['limit'] = ' LIMIT 0,1';
             case 'select':
-                if (!empty($this->groupvalue)) {
-                    if (empty($this->where['grouporder'])) {
-                        $this->where['grouporder'] = $this->where['order'];
+                if (!empty($this->group_value)) {
+                    if (empty($this->where['group_order'])) {
+                        $this->where['group_order'] = $this->where['order'];
                     }
-                    if (!empty($this->where['gorder'])) {
-                        $this->where['order'] = $this->where['gorder'];
+                    if (!empty($this->where['g_order'])) {
+                        $this->where['order'] = $this->where['g_order'];
                     }
-                    $sql = 'select ' . $this->groupincolumns . ' from ' . $this->table . $this->join . $where . $this->where['grouporder'];
-                    $sql .= ' limit 999999';
-                    $sql = 'select ' . $this->groupcolumns . ' from (' . $sql . ') a' . $this->where['group'] . $this->where['having'] . $this->where['order'] . $this->where['limit'];
+
+                    $sub_group = false;
+                    $sql = 'SELECT ' . $this->group_in_columns . ' FROM ' . $this->table . $this->join . $where;
+                    if (isset($this->config['sub_group'])) {
+                        $sql .= $this->where['group_order'];
+                        $sql .= ' LIMIT 999999';
+                        $sql = 'SELECT * FROM (' . $sql . ') a';
+                        $sub_group = true;
+                    }
+
+                    $sql .= $this->tableNameResetByGroup($this->where['group'], 'a', $sub_group);
+                    if (!empty($this->where['having'])) {
+                        $sql .= $this->tableNameResetByGroup($this->where['having'], 'a', $sub_group);
+                    }
+                    if (!empty($this->where['order'])) {
+                        $sql .= $this->tableNameResetByGroup($this->where['order'], 'a', $sub_group);
+                    }
+                    if (!empty($this->where['limit'])) {
+                        $sql .= $this->where['limit'];
+                    }
                 } else {
-                    $sql = 'select ' . $this->columns . ' from ' . $this->table . $this->join . $where . $this->where['order'] . $this->where['limit'];
+                    $sql = 'SELECT ' . $this->columns . ' FROM ' . $this->table . $this->join . $where . $this->where['order'] . $this->where['limit'];
                 }
                 break;
             case 'has':
-                ;
             case 'count':
-                if (!empty($this->groupvalue)) {
-                    $sql = 'select count(*) from (select ' . $this->groupvalue . ' from ' . $this->table . $this->join . $where . $this->where['group'] . $this->where['having'] . $this->where['limit'] . ') a';
+                if (!empty($this->group_value)) {
+                    $sql = 'SELECT COUNT(*) FROM (SELECT ' . $this->group_value . ' FROM ' . $this->table . $this->join . $where . $this->where['group'] . $this->where['having'] . $this->where['limit'] . ') a';
                 } else {
-                    $sql = 'select count(*) from ' . $this->table . $this->join . $where . $this->where['order'] . $this->where['limit'];
+                    $sql = 'SELECT COUNT(*) FROM ' . $this->table . $this->join . $where . $this->where['order'] . $this->where['limit'];
                 }
                 break;
             case 'insert':
-                $sql = 'insert into ' . $this->table . $set;
+                $sql = 'INSERT INTO ' . $this->table . $set;
                 break;
             case 'update':
-                $sql = 'update ' . $this->table . $this->join . $set . $where;
+                $sql = 'UPDATE ' . $this->table . $this->join . $set . $where;
 
                 break;
             case 'delete':
-                $sql = 'delete from ' . $this->table . $where;
+                $sql = 'DELETE FROM ' . $this->table . $where;
                 break;
             case 'copy':
-                $sql = 'insert into ' . $this->table . $this->cset . ' select ' . $this->ocset . ' from ' . $this->otable . $where;
+                $sql = 'INSERT INTO ' . $this->table . $this->cset . ' SELECT ' . $this->ocset . ' FROM ' . $this->otable . $where;
                 break;
         }
         return $sql;
     }
 
-    public function debug()
+    /**
+     * 根据分组修改名称
+     * @param $orig_sql
+     * @param string $replace
+     * @param bool $sub_group
+     * @return string|string[]
+     */
+    private function tableNameResetByGroup($orig_sql, $replace = '', $sub_group = true)
     {
-        $this->config['debug'] = 2;
-        return $this;
-    }
-
-    public function log()
-    {
-        var_dump($this->queryarr);
-    }
-
-    public function last_query()
-    {
-        echo end($this->queryarr);
-    }
-
-    public function action($actions)
-    {
-        if (is_callable($actions)) {
-            $this->beginTransaction();
-            $result = $actions($this);
-            if ($result === false) {
-                $this->rollBack();
-            } else {
-                $this->commit();
+        if ($sub_group) {
+            foreach ($this->group_where_column_list as $orig_column => $as_column) {
+                $orig_sql = str_replace($orig_column, $replace . '.' . $as_column, $orig_sql);
             }
-        } else {
-            return false;
+
+            foreach ($this->join_tables as $table_name) {
+                $orig_sql = str_replace($table_name . '.', $replace . '.', $orig_sql);
+            }
         }
+        return $orig_sql;
     }
 
-    public function info()
+    /**
+     * 拼接sql
+     * @param $table
+     * @param array $join
+     * @param string|array $columns
+     * @param array $where
+     * @return string
+     */
+    public function sql($table, $join = [], $columns = [], $where = [])
     {
-        $result = array();
-        $result['server'] = $this->getAttribute(PDO::ATTR_SERVER_INFO);
-        $result['client'] = $this->getAttribute(PDO::ATTR_CLIENT_VERSION);
-        $result['driver'] = $this->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $result['version'] = $this->getAttribute(PDO::ATTR_SERVER_VERSION);
-        $result['connection'] = $this->getAttribute(PDO::ATTR_CONNECTION_STATUS);
-        print_r($result);
+        //参数处理
+        $this->init();
+        $this->table($table);
+        if (is_array($join)) {
+            if (key($join)) {
+                $joins = substr(key($join), 0, 1);
+            }
+        }
+        if (isset($joins) && $joins == '[') {
+            $this->join($join);
+        } else {
+            $where = $columns;
+            $columns = $join;
+        }
+        $this->getColumn($table);
+        $this->columns($columns);
+        if (array_key_exists('del', $this->column[$this->main_table]) && $this->config['real_delete'] == 0) {
+            if (!empty($where)) {
+                $where[$this->main_table . '.del[!]'] = 1;
+            } else {
+                $where = array('del[!]' => 1);
+            }
+        }
+        if (!empty($where)) {
+            $this->where($where);
+        }
+        //返回sql字符串
+        return $this->assembling('select');
     }
 
     /**
@@ -1224,53 +1290,27 @@ class DB extends PDO
             $this->where($where);
         }
         //数据库操作
-        $this->doquery('select');
-        $return = $this->res->fetchAll();
-        if ($this->singlecolumn == true) {
-            $returnvalue = array();
+        $this->doQuery('select');
+        $return = $this->res->fetchAll(PDO::FETCH_ASSOC);
+        /*if ($this->single_column == true) {
+            $new_return = array();
             foreach ($return as $value) {
-                $returnvalue[] = reset($value);
+                $new_return[] = reset($value);
             }
-            $return = $returnvalue;
-        }
+            return $new_return;
+        }*/
         return $return;
     }
 
-    public function sql($table, $join = '', $columns = '', $where = [])
-    {
-        //参数处理
-        $this->init();
-        $this->table($table);
-        if (is_array($join)) {
-            if (key($join)) {
-                $joins = substr(key($join), 0, 1);
-            }
-        }
-        if ($joins == '[') {
-            $this->join($join);
-        } else {
-            $where = $columns;
-            $columns = $join;
-        }
-        $this->getcolumn($table);
-        $this->columns($columns);
-        if (array_key_exists('isdel', $this->column[$this->maintable]) && $this->config['realdelete'] == 0) {
-            if (!empty($where)) {
-                $where[$this->maintable . '.isdel[!]'] = 1;
-            } else {
-                $where = array('isdel[!]' => 1);
-            }
-        }
-        if (!empty($where)) {
-            $this->where($where);
-        }
-        //返回sql字符串
-        return $this->assembling('select');
-    }
-
+    /**
+     * 统计sql
+     * @param $table
+     * @param string $join
+     * @param array $where
+     * @return mixed
+     */
     public function count($table, $join = '', $where = [])
     {
-        //参数处理
         $this->init();
         $this->table($table);
         if (is_array($join)) {
@@ -1278,29 +1318,36 @@ class DB extends PDO
                 $joins = substr(key($join), 0, 1);
             }
         }
-        if ($joins == '[') {
+        if (isset($joins) && $joins == '[') {
             $this->join($join);
         } else {
             $where = $join;
         }
-        $this->getcolumn($table);
-        if (array_key_exists('isdel', $this->column[$this->maintable]) && $this->config['realdelete'] == 0) {
+        $this->getColumn($table);
+        if (array_key_exists('del', $this->column[$this->main_table]) && $this->config['real_delete'] == 0) {
             if (!empty($where)) {
-                $where = array_merge($where, array($this->maintable . '.isdel[!]' => 1));
+                $where = array_merge($where, array($this->main_table . '.del[!]' => 1));
             } else {
-                $where = array('isdel[!]' => 1);
+                $where = array('del[!]' => 1);
             }
         }
         if (!empty($where)) {
             $this->where($where);
         }
         //数据库操作
-        $this->doquery('count');
-        $return = $this->res->fetchColumn();
-        return $return;
+        $this->doQuery('count');
+        return $this->res->fetchColumn();
     }
 
-    public function get($table, $join = '', $columns = '', $where = [])
+    /**
+     * 获取单条记录
+     * @param $table
+     * @param array $join
+     * @param array|string $columns
+     * @param array $where
+     * @return mixed
+     */
+    public function get($table, $join = [], $columns = [], $where = [])
     {
         //参数处理
         $this->init();
@@ -1310,34 +1357,41 @@ class DB extends PDO
                 $joins = substr(key($join), 0, 1);
             }
         }
-        if ($joins == '[') {
+        if (isset($joins) && $joins == '[') {
             $this->join($join);
         } else {
             $where = $columns;
             $columns = $join;
         }
-        $this->getcolumn($table);
+        $this->getColumn($table);
         $this->columns($columns);
-        if (array_key_exists('isdel', $this->column[$this->maintable]) && $this->config['realdelete'] == 0) {
+        if (array_key_exists('del', $this->column[$this->main_table]) && $this->config['real_delete'] == 0) {
             if (!empty($where)) {
-                $where = array_merge($where, array($this->maintable . '.isdel[!]' => 1));
+                $where = array_merge($where, array($this->main_table . '.del[!]' => 1));
             } else {
-                $where = array('isdel[!]' => 1);
+                $where = array('del[!]' => 1);
             }
         }
         if (!empty($where)) {
             $this->where($where);
         }
         //数据库操作
-        $this->doquery('get');
+        $this->doQuery('get');
         $return = $this->res->fetch();
-        if ($this->singlecolumn == true) {
+        if ($this->single_column == true) {
             $return = $return[0];
         }
         return $return;
     }
 
-    public function has($table, $join = '', $where = [])
+    /**
+     * 检测数据是否存在
+     * @param $table
+     * @param array $join
+     * @param array $where
+     * @return bool
+     */
+    public function has($table, $join = [], $where = [])
     {
         //参数处理
         $this->init();
@@ -1347,65 +1401,80 @@ class DB extends PDO
                 $joins = substr(key($join), 0, 1);
             }
         }
-        if ($joins == '[') {
-            $this->join($join);
+        if (isset($joins) && $joins == '[') {
+            $this->join($joins);
         } else {
             $where = $join;
         }
-        $this->getcolumn($table);
-        if (array_key_exists('isdel', $this->column[$this->maintable]) && $this->config['realdelete'] == 0) {
+        $this->getColumn($table);
+        if (array_key_exists('del', $this->column[$this->main_table]) && $this->config['real_delete'] == 0) {
             if (!empty($where)) {
-                $where = array_merge($where, array($this->maintable . '.isdel[!]' => 1));
+                $where = array_merge($where, array($this->main_table . '.del[!]' => 1));
             } else {
-                $where = array('isdel[!]' => 1);
+                $where = array('del[!]' => 1);
             }
         }
         if (!empty($where)) {
             $this->where($where);
         }
-        $this->doquery('has');
+        $this->doQuery('has');
         $return = $this->res->fetchColumn();
-        if ($return > 0) {
-            return true;
-        } else {
-            return false;
-        }
+        return $return > 0;
     }
 
+    /**
+     * 新增数据
+     * @param $table
+     * @param array $set
+     * @return string
+     */
     public function insert($table, $set)
     {
-        //参数处理
         $this->init();
         $this->table($table);
-        $this->getcolumn($table);
-        $this->columnset($set);
+        $this->getColumn($table);
+        $this->columnSet($set);
         //数据库操作
-        $this->doquery('insert');
+        $this->doQuery('insert');
         return $this->lastInsertId();
     }
 
-    public function copy($table, $otable, $set = '', $where = [])
+    /**
+     * 数据字段copy
+     * @param $table
+     * @param $otable
+     * @param array $set
+     * @param array $where
+     * @return int
+     */
+    public function copy($table, $otable, $set = [], $where = [])
     {
-        //参数处理
         $this->init();
         $this->table($table);
         $this->table($otable, 'otable');
         if (!empty($set)) {
-            $this->copyset($set);
+            $this->copySet($set);
         } else {
-            $this->cset = '';
-            $this->ocset = '*';
+            $this->current_set = '';
+            $this->original_set = '*';
         }
         if (!empty($where)) {
             $this->where($where);
         }
         //数据库操作
-        $this->doquery('copy');
+        $this->doQuery('copy');
         return 1;
-        return $this->res->rowCount();
     }
 
-    public function update($table, $join, $set = '', $where = [])
+    /**
+     * 更新数据
+     * @param $table
+     * @param array $join
+     * @param array $set
+     * @param array $where
+     * @return mixed
+     */
+    public function update($table, $join = [], $set = [], $where = [])
     {
         //参数处理
         $this->init();
@@ -1415,46 +1484,56 @@ class DB extends PDO
                 $joins = substr(key($join), 0, 1);
             }
         }
-        if ($joins == '[') {
+        if (isset($joins) && $joins == '[') {
             $this->join($join);
         } else {
             $where = $set;
             $set = $join;
         }
-        $this->getcolumn($table);
-        $this->columnset($set);
+        $this->getColumn($table);
+        $this->columnSet($set);
         if (!empty($where)) {
             $this->where($where);
         }
         //数据库操作
-        $this->doquery('update');
+        $this->doQuery('update');
         return $this->res->rowCount();
     }
 
+    /**
+     * 删除操作
+     * @param $table
+     * @param array $where
+     * @param int $mode
+     * @return mixed
+     */
     public function delete($table, $where = [], $mode = 0)
     {
-        //参数处理
         $this->init();
-        $this->getcolumn($table);
+        $this->getColumn($table);
         $this->table($table);
-        if ($this->config['realdelete'] == 1 || $mode == 1) {
+        if ($this->config['real_delete'] == 1 || $mode == 1) {
             if (!empty($where)) {
                 $this->where($where);
             }
             //数据库操作
-            $this->doquery('delete');
+            $this->doQuery('delete');
             return $this->res->rowCount();
         } else {
-            if (!array_key_exists('isdel', $this->column[$this->maintable])) {
-                $sql = "ALTER TABLE " . $this->table . " ADD COLUMN `isdel`  tinyint(1) NOT NULL DEFAULT 0 , ADD INDEX (`isdel`)";
-                //数据库操作
+            if (!array_key_exists('del', $this->column[$this->main_table])) {
+                $sql = "ALTER TABLE " . $this->table . " ADD COLUMN `del`  tinyint(1) NOT NULL DEFAULT 0 , ADD INDEX (`del`)";
                 $this->query($sql);
             }
-            return $this->update($table, array("#isdel" => 1), $where);
+            return $this->update($table, array("del" => 1), $where);
         }
     }
 
-    public function showtables($table = '')
+    /**
+     * 查看的数据表
+     * @param string $table
+     * @return array
+     */
+    public function showTables($table = '')
     {
         if (empty($table)) {
             $sql = 'show tables';
@@ -1465,87 +1544,40 @@ class DB extends PDO
         return $this->res->fetchAll();
     }
 
-    public function istableexist($table)
+    /**
+     * 验证数据表是否存在
+     * @param $table
+     * @return bool
+     */
+    public function tableExist($table)
     {
-        $return = $this->has('information_schema.tables', '', array('@table_name' => $table, 'TABLE_SCHEMA' => $this->config['database']));
-        return $return;
+        return $this->has('information_schema.tables', '', array(
+            '@table_name' => $table,
+            'TABLE_SCHEMA' => $this->config['database']
+        ));
     }
 
-    public function creattable($table, $tablecomment = '', $fields)
-    {
-        $this->init();
-        $indexarray = array();
-        $sql = "CREATE TABLE `" . $this->config['prefix'] . $table . "` (";
-        foreach ($fields as $key => $value) {
-            $sql .= "`" . $key . "`  " . $value['type'];
-            if ($value['length']) {
-                $sql .= "(" . $value['length'];
-                if ($value['decimalpoint']) {
-                    $sql .= "," . $value['decimalpoint'];
-                }
-                $sql .= ')';
-            }
-            if ($value['required']) {
-                $sql .= ' NOT NULL';
-            }
-            if ($value['auto']) {
-                $sql .= ' AUTO_INCREMENT';
-            }
-            if ($value['primary']) {
-                $primarysql = ",PRIMARY KEY (`" . $key . "`)";
-            }
-            if ($value['indexing'] == 1) {
-                $indexarray[] = '`' . $key . '`';
-            } else if ($value['indexing'] == 2) {
-                $uniqueindexarray[] = '`' . $key . '`';
-            }
-            if (isset($value['defaultset'])) {
-                if ($value['defaultmode'] != 1) {
-                    $value['defaultset'] = $this->checkvalue($value['defaultset'], $value['type']);
-                    $value['defaultset'] = $value['defaultset']['value'];
-                    $sql .= " DEFAULT " . $value['defaultset'];
-                }
-            }
-            if ($value['comment']) {
-                $sql .= " COMMENT '" . $value['comment'] . "'";
-            }
-            $sql .= ",";
-        }
-        $sql = substr($sql, 0, strlen($sql) - 1) . $primarysql;
-        if (!empty($uniqueindexarray)) {
-            foreach ($uniqueindexarray as $value) {
-                $sql .= ",INDEX (" . $value . ")";
-            }
-        }
-        if (!empty($indexarray)) {
-            foreach ($indexarray as $value) {
-                $sql .= ",INDEX (" . $value . ")";
-            }
-        }
-        $sql .= ")";
-        if (!empty($tablecomment)) {
-            $sql .= "COMMENT='" . $tablecomment . "'";
-        }
-        if ($this->config['debug'] != 0) {
-            echo $sql;
-            if ($this->config['debug'] == 2) {
-                exit;
-            }
-        }
-        $this->query($sql);
-    }
-
-    public function getindex($table)
+    /**
+     * 查看数据表索引
+     * @param $table
+     * @return array
+     */
+    public function getTableIndex($table)
     {
         $sql = "show index from `" . $table . "`";
-        $this->index = $this->query($sql)->fetchAll();
-        return $this->index;
+        return $this->query($sql)->fetchAll();
     }
 
-    private function delindex($table)
+    /**
+     * 删除索引
+     * @param $table
+     * @return bool
+     */
+    private function delTableIndex($table)
     {
-        $this->getindex($table);
-        foreach ($this->index as $value) {
+        $index = array();
+        $table_index = $this->getTableIndex($table);
+        foreach ($table_index as $value) {
             if ($value['Key_name'] != "PRIMARY") {
                 $index[] = $value['Key_name'];
             }
@@ -1556,131 +1588,95 @@ class DB extends PDO
             foreach ($index as $value) {
                 $sql .= " DROP INDEX `" . $value . "`,";
             }
-            $sql = substr($sql, 0, strlen($sql) - 1);
+            $sql = substr($sql, 0, -1);
             $this->query($sql);
         }
+        return true;
     }
 
-    public function updatetable($table, $tablecomment = '', $fields)
-    {
-        $this->init();
-        $this->getcolumn($table);
-        $this->table($table);
-        foreach ($this->column[$this->maintable] as $key => $value) {
-            if ($value[0]['Key'] == 'PRI') {
-                $maincolumn = $key;
-            }
-        }
-        $this->delindex($this->maintable);
-        $indexarray = array();
-        $sql = "ALTER TABLE `" . $this->maintable . "` ";
-        $i = 0;
-        foreach ($fields as $key => $value) {
-            if (!array_key_exists($key, $this->column[$this->maintable])) {
-                $sql .= "ADD";
-                if ($value['defaultmode'] == 1) {
-                    $value['defaultmode'] = 0;
-                }
-            } else if ($value['replaceid']) {
-                $sql .= "CHANGE";
-            } else {
-                $sql .= "MODIFY";
-            }
-            $sql .= " COLUMN `" . $key . "`";
-            if ($value['replaceid']) {
-                $sql .= " `" . $value['replaceid'] . "`";
-            }
-            $sql .= " " . $value['type'];
-            if ($value['length']) {
-                $sql .= "(" . $value['length'];
-                if ($value['decimalpoint']) {
-                    $sql .= "," . $value['decimalpoint'];
-                }
-                $sql .= ')';
-            }
-            if ($value['required']) {
-                $sql .= ' NOT NULL';
-            }
-            if ($value['auto']) {
-                $sql .= ' AUTO_INCREMENT';
-            }
-            if ($value['primary']) {
-                $primarysql = ",PRIMARY KEY (`" . $key . "`)";
-            }
-            if ($value['indexing'] == 1) {
-                $indexarray[] = '`' . $key . '`';
-            } else if ($value['indexing'] == 2) {
-                $uniqueindexarray[] = '`' . $key . '`';
-            }
-            if (isset($value['defaultset'])) {
-                if ($value['defaultmode'] != 1) {
-                    $value['defaultset'] = $this->checkvalue($value['defaultset'], $value['type']);
-                    $value['defaultset'] = $value['defaultset']['value'];
-                }
-                $sql .= " DEFAULT " . $value['defaultset'];
-            }
-            if ($value['comment']) {
-                $sql .= " COMMENT '" . $value['comment'] . "'";
-            }
-            if ($i == 0) {
-                $column = $maincolumn;
-            } else {
-                // $column = $precolumn;
-                empty($column);
-            }
-            // if (empty($value['replaceid'])) {
-            //     $precolumn = $key;
-            // } else {
-            //     $precolumn = $value['replaceid'];
-            // }
-            if (empty($column)) {
-                $sql .= " FIRST,";
-            } else {
-                $sql .= " AFTER `" . $column . "`,";
-            }
-            $i++;
-        }
-        $sql = substr($sql, 0, strlen($sql) - 1) . $primarysql;
-        if (!empty($tablecomment)) {
-            $sql .= ",COMMENT='" . $tablecomment . "'";
-        }
-        if ($this->config['debug'] != 0) {
-            echo $sql;
-            if ($this->config['debug'] == 2) {
-                exit;
-            }
-        }
-        $this->query($sql);
-
-        if (!empty($indexarray)) {
-            foreach ($indexarray as $value) {
-                $indexsql = "ALTER TABLE `" . $this->maintable . "` ADD INDEX (" . $value . ")";
-                $this->query($indexsql);
-            }
-        }
-        if (!empty($uniqueindexarray)) {
-            foreach ($uniqueindexarray as $value) {
-                $indexsql = "ALTER TABLE `" . $this->maintable . "` ADD UNIQUE (" . $value . ")";
-                $this->query($indexsql);
-            }
-        }
-    }
-
-    public function renametable($table, $newtable)
+    /**
+     * 数据表重命名
+     * @param $table
+     * @param $newtable
+     * @return bool
+     */
+    public function renameTable($table, $newtable)
     {
         $sql = 'ALTER  TABLE `' . $this->config['prefix'] . $table . '` RENAME TO `' . $newtable . '`';
         $this->query($sql);
+        return true;
     }
 
+    /**
+     * 查看数据表是否存在
+     * @param $table
+     * @return bool
+     */
     public function has_table($table)
     {
         $sql = "show tables like '" . $this->config['prefix'] . $table . "'";
         $this->res = $this->query($sql);
         $return = $this->res->fetchColumn();
-        if ($return > 0) {
-            return true;
+        return $return > 0;
+    }
+
+    /**
+     * 日志打印
+     * @return $this
+     */
+    public function debug()
+    {
+        $this->config['debug'] = 2;
+        return $this;
+    }
+
+    /**
+     * 查询执行日志
+     */
+    public function log()
+    {
+        var_dump($this->query_arr);
+    }
+
+    /**
+     * 最后一次执行sql日志
+     */
+    public function last_query()
+    {
+        echo end($this->query_arr);
+    }
+
+    /**
+     * 执行事务，必须是个方法
+     * @param $actions
+     * @return false
+     */
+    public function action($actions)
+    {
+        if (is_callable($actions)) {
+            $this->beginTransaction();
+            $result = $actions($this);
+            if ($result === false) {
+                $this->rollBack();
+            } else {
+                $this->commit();
+            }
         } else {
             return false;
         }
+    }
+
+    /**
+     * 数据库信息
+     */
+    public function info()
+    {
+        $result = array();
+        $result['server'] = $this->getAttribute(PDO::ATTR_SERVER_INFO);
+        $result['client'] = $this->getAttribute(PDO::ATTR_CLIENT_VERSION);
+        $result['driver'] = $this->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $result['version'] = $this->getAttribute(PDO::ATTR_SERVER_VERSION);
+        $result['connection'] = $this->getAttribute(PDO::ATTR_CONNECTION_STATUS);
+        print_r($result);
     }
 }
