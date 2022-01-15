@@ -19,6 +19,28 @@ function json_encode_ex($value)
 }
 
 /**
+ * 读取配置文件信息
+ * @param string $conf_name
+ * @return mixed
+ */
+function get_env_conf($conf_name)
+{
+    static $env_configs = [];
+    if (empty($env_configs)) {
+        require LIB_DIR . 'spyc/Spyc.php';
+        $env_configs = Spyc::YAMLLoad(API_DIR . 'env.' . PROJECT_ENV . '.yaml');
+    }
+
+    $conf_names = explode('.', $conf_name);
+    $each_configs = $env_configs;
+    foreach ($conf_names as $name) {
+        $each_configs = $each_configs[$name];
+    }
+
+    return $each_configs;
+}
+
+/**
  * 处理数据库图片返回给前端
  *
  * @param string $img
@@ -521,7 +543,7 @@ function remove_key_number($db_data)
     if (!empty($db_data) && is_array($db_data)) {
         foreach ($db_data as $db_key => $db_val) {
             if (is_array($db_val)) {
-                $return_data[$db_key] = remove_db_data_num($db_val);
+                $return_data[$db_key] = remove_key_number($db_val);
             } else {
                 if (!is_numeric($db_key)) {
                     $return_data[$db_key] = $db_val;
@@ -603,7 +625,7 @@ function page_array($data, $from, $limit)
  */
 function get_ip_address($ipv4)
 {
-    include_once(LIB_DIR . "ip2region/Ip2Region.class.php");
+    include(LIB_DIR . "ip2region/Ip2Region.class.php");
 
     $ip2region  = new Ip2Region(LIB_DIR . 'ip2region/data/ip2region.db');
     try {

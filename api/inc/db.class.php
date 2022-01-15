@@ -1597,12 +1597,12 @@ class DB extends PDO
     /**
      * 数据表重命名
      * @param $table
-     * @param $newtable
+     * @param $new_name
      * @return bool
      */
-    public function renameTable($table, $newtable)
+    public function renameTable($table, $new_name)
     {
-        $sql = 'ALTER  TABLE `' . $this->config['prefix'] . $table . '` RENAME TO `' . $newtable . '`';
+        $sql = 'ALTER  TABLE `' . $this->config['prefix'] . $table . '` RENAME TO `' . $new_name . '`';
         $this->query($sql);
         return true;
     }
@@ -1621,7 +1621,7 @@ class DB extends PDO
     }
 
     /**
-     * 日志打印
+     * sql debug
      * @return $this
      */
     public function debug()
