@@ -40,7 +40,7 @@ if ($this->checkthisapi()) {
     // $column = ['d.name[dname]','d.type[dtype]', 'd.tbid[did]'];
     // $this->db->select('department(d)', $join, $column, $set);
 
-    echo get_env_conf("mgk.param.ds");
+    echo get_env("mgk.param.ds");
     exit;
     //输出返回数据
     $this->echodata($data);
