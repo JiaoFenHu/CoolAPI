@@ -470,15 +470,13 @@ class api
                 if (is_array($value['data'])) {
                     if (!empty($params[$key])) {
                         foreach ($params[$key] as $tip_keys => &$son_params) {
-                            if (empty($tip_keys)) {
-                                $son_file = $file[$key]['name'][$tip_keys];
-                            } else {
+                            if (!empty($tip_keys)) {
                                 $son_file = $file[$key][$tip_keys];
                             }
                             if (empty($son_file)) {
                                 $son_file = -1;
                             }
-                            $son_params = $this->checkparam($value['data'], $son_params, $son_file, $tip_keys);
+                            $son_params = $this->checkRequestParams($value['data'], $son_params, $son_file, $tip_keys);
                         }
                     }
 
