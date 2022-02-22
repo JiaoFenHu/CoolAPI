@@ -4,7 +4,7 @@ require_once(COMPOSER_DIR . 'autoload.php');
 
 use Hashids\Hashids;
 
-class hashId
+class hashId extends base
 {
     public $db;
     public $api;
@@ -13,8 +13,6 @@ class hashId
 
     function __construct($api)
     {
-        global $db;
-        $this->db = $db;
         $this->api = $api;
     }
 

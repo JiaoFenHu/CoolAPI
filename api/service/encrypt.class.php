@@ -17,121 +17,51 @@ class encrypt
 
     function __construct($api)
     {
-
-        global $db;
-        $this->db = $db;
         $this->api = $api;
-
-        // $this->appId = APPID;
-        // $this->appId = 'qm1624980136';
-        // $this->appSecret = 'f6cc7030b8c0ba07a6da488362f2748e';
-        // $this->token = '43e99b4a38a748d3932fca9382404b41';
-        // $this->url = 'https://test.wsmsd.cn/q/api/mch/cmd';
     }
-
 
     /**
      * 3DES加密转16进制
-     *
-     * @param string $string
-     * @param string $key
-     * @return void
+     * @param $string
+     * @param $key
+     * @return string
      */
-    public function des3_encrypt_2hex($string, $key)
+    public function DesToHexEncrypt($string, $key)
     {
         return strtoupper(bin2hex($this->des3_encrypt($string, $key)));
     }
 
     /**
      * 3DES解密
-     *
-     * @param string $string
-     * @param string $key
-     * @return void
+     * @param $string
+     * @param $key
+     * @return string
      */
-    public function des3_decrypt_2bin($string, $key)
+    public function DesToBinDecrypt($string, $key)
     {
         return $this->des3_decrypt(hex2bin(strtolower($string)), $key);
     }
 
-
     /**
-     * AES-ECB解密
-     *
-     * @param string $string
-     * @param string $key
-     * @return void
+     * AES-ECB加密并转16进制
+     * @param $string
+     * @param $key
+     * @return string
      */
-    public function aes_decrypt_2bin($string, $key)
+    public function AesToHexEncrypt($string, $key)
     {
-        return $this->aes_ecb_decrypt(hex2bin(strtolower($string)), $key);
-    }
-
-
-    /**
-     * AES-ECB解密
-     *
-     * @param string $string
-     * @param string $key
-     * @return void 
-     */
-    public function aes_encrypt_2hex($string, $key)
-    {
-        // return $this->aes_ecb_encrypt(hex2bin(strtolower($string)), $key);
         return strtoupper(bin2hex($this->aes_ecb_encrypt($string, $key)));
     }
 
     /**
-     * 统一获取sign方法
-     *
-     * @param array $reqData
-     * @return void
+     * AES-ECB解密
+     * @param $string
+     * @param $key
+     * @return string
      */
-    public function get_sign($reqData)
+    public function AesToBinDecrypt($string, $key)
     {
-        if (!is_array($reqData)) return 'request data is not array';
-
-        $sing_str = '';
-        ksort($reqData);
-        foreach ($reqData as $pKey => $pVal) {
-            if (is_array($pVal)) {
-                $pVal = json_encode_ex($pVal);
-            }
-
-            $pVal = empty($pVal) ? '' : $pVal;
-            $sing_str .= $pKey . '=' . $pVal . '|';
-        }
-
-        $sing_str .= $this->appSecret;
-        // var_dump('待签名sign字符串：' . $sing_str);
-        return strtoupper(md5($sing_str));
-    }
-
-    /**
-     * 将json字符串转化成php数组
-     * @param string  $json_str
-     * @return array $json_arr
-     */
-    public function json_to_array($json_str)
-    {
-
-        if (is_array($json_str) || is_object($json_str) || is_null(json_decode($json_str))) {
-            $json_str = $json_str;
-        } else {
-            $json_str =  strval($json_str);
-            $json_str = json_decode($json_str, true);
-        }
-        $json_arr = array();
-        foreach ($json_str as $k => $w) {
-            if (is_object($w)) {
-                $json_arr[$k] = $this->json_to_array($w); //判断类型是不是object
-            } else if (is_array($w)) {
-                $json_arr[$k] = $this->json_to_array($w);
-            } else {
-                $json_arr[$k] = $w;
-            }
-        }
-        return $json_arr;
+        return $this->aes_ecb_decrypt(hex2bin(strtolower($string)), $key);
     }
 
     /**
@@ -140,7 +70,7 @@ class encrypt
      * @param string $key
      * @return string
      */
-    public function des3_encrypt($string, $key)
+    public function desEncrypt($string, $key)
     {
         return openssl_encrypt((string) $string, 'DES-EDE3', $key, OPENSSL_RAW_DATA);
     }
@@ -151,20 +81,9 @@ class encrypt
      * @param string $key
      * @return string
      */
-    public function des3_decrypt($string, $key)
+    public function desDecrypt($string, $key)
     {
         return openssl_decrypt((string) $string, 'DES-EDE3', $key, OPENSSL_RAW_DATA);
-    }
-
-    /**
-     * AES 解密
-     * @param string $string
-     * @param string $key
-     * @return string
-     */
-    public function aes_ecb_decrypt($string, $key)
-    {
-        return openssl_decrypt($string, "AES-128-ECB", $key, OPENSSL_RAW_DATA);
     }
 
     /**
@@ -173,9 +92,20 @@ class encrypt
      * @param string $key
      * @return string
      */
-    public function aes_ecb_encrypt($string, $key)
+    public function aesEcbEncrypt($string, $key)
     {
         return openssl_encrypt($string, "AES-128-ECB", $key, OPENSSL_RAW_DATA);
+    }
+
+    /**
+     * AES 解密
+     * @param string $string
+     * @param string $key
+     * @return string
+     */
+    public function aesEcbDecrypt($string, $key)
+    {
+        return openssl_decrypt($string, "AES-128-ECB", $key, OPENSSL_RAW_DATA);
     }
 
     /**
@@ -318,7 +248,7 @@ class encrypt
      * RSA constructor.
      * @param string $KeyPath
      * @param string $cert_type 证书类型: pub  pri
-     * @throws FileNotFoundException
+     * @throws Exception
      */
     public function loadingCert($KeyPath, $cert_type)
     {
@@ -338,7 +268,7 @@ class encrypt
                 }
                 break;
             default:
-                $this->api->dataerror('错误的证书类型!', 55);
+                throw new Exception("错误的证书类型!");
                 break;
         }
 
@@ -347,20 +277,18 @@ class encrypt
 
     /**
      * 校验文件是否存在
-     * @param $keyPath string 文件路径
+     * @param $keyPath
      * @return bool
-     * @throws FileNotFoundException
+     * @throws Exception
      */
     public function checkKeyFile($keyPath)
     {
         if (!empty($keyPath)) {
             if (!file_exists($keyPath)) {
-                $this->api->dataerror('密钥文件不存在！', 55);
+                throw new Exception("密钥文件不存在!");
             }
-
             return true;
         }
-
         return false;
     }
 
@@ -371,7 +299,9 @@ class encrypt
      */
     public function formatterPublicKey($publicKey)
     {
-        if (strpos($publicKey, '-----BEGIN PUBLIC KEY-----') !== false) return $publicKey;
+        if (strpos($publicKey, '-----BEGIN PUBLIC KEY-----') !== false) {
+            return $publicKey;
+        }
 
         $str = chunk_split($publicKey, 64, PHP_EOL); //在每一个64字符后加一个\n
         $publicKey = "-----BEGIN PUBLIC KEY-----" . PHP_EOL . $str . "-----END PUBLIC KEY-----";
@@ -386,11 +316,12 @@ class encrypt
      */
     public function formatterPrivateKey($privateKey)
     {
-        if (strpos($privateKey, '-----BEGIN RSA PRIVATE KEY-----') !== false) return $privateKey;
+        if (strpos($privateKey, '-----BEGIN RSA PRIVATE KEY-----') !== false) {
+            return $privateKey;
+        }
 
         $str = chunk_split($privateKey, 64, PHP_EOL); //在每一个64字符后加一个\n
         $privateKey = "-----BEGIN RSA PRIVATE KEY-----" . PHP_EOL . $str . "-----END RSA PRIVATE KEY-----";
-
         return $privateKey;
     }
 }

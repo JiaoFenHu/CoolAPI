@@ -631,7 +631,7 @@ class DB extends PDO
                             if (empty($value['type'])) {
                                 $return['pre_' . $type] .= $data['value'];
                             } else {
-                                $this->pre_array[] = $data['prevalue'];
+                                $this->pre_array[] = $data['pre_value'];
                                 $return['pre_' . $type] .= '?';
                             }
                         }

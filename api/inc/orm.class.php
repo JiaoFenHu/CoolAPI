@@ -1,5 +1,6 @@
 <?php
 
+global $db;
 
 class orm
 {
@@ -8,7 +9,10 @@ class orm
     public $table_name;
     public $table_name_as;
 
-    public function __construct()
+    /**
+     * 初始化父级DB类
+     */
+    protected function initDB()
     {
         global $db;
         $this->db = $db;
@@ -76,7 +80,7 @@ class orm
      * @param array $where
      * @return mixed
      */
-    public function edit(array $set, array $where)
+    public function update(array $set, array $where)
     {
         $set['#edit_time'] = 'NOW()';
         return $this->db->update($this->table_name, $set, $where);

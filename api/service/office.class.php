@@ -5,11 +5,10 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
-class office
+class office extends base
 {
     public $db;
     public $api;
-    public $table;
 
     private $sheet_title = 'sheetReport';
     private $horizontal = 'center';
@@ -18,10 +17,7 @@ class office
 
     function __construct($api)
     {
-        global $db;
-        $this->db = $db;
         $this->api = $api;
-        $this->table = 'area';
     }
 
 
