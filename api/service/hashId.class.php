@@ -1,12 +1,9 @@
 <?php
 
-require_once(COMPOSER_DIR . 'autoload.php');
-
 use Hashids\Hashids;
 
 class hashId extends base
 {
-    public $db;
     public $api;
 
     private static $salt = '1one_' . PRO_KEY;
@@ -40,10 +37,7 @@ class hashId extends base
      */
     private function getMixtureAlphabet()
     {
-        $string = "abcdefghijklmnopqrstuvwxyz";
-        $string .= strtoupper($string);
-        $string .= '0123456789';
-        return $string;
+        return $this->getEnglishAlphabet(3) . '0123456789';
     }
 
     /**
@@ -51,16 +45,20 @@ class hashId extends base
      * @param $id
      * @param int $len
      * @param int $mode
-     * @param int $param
      * @return false|mixed|string
      * @throws Exception
      */
-    public function getHashIdString($id, $len = 23, $mode = 1, $param = 1)
+    public function getHashId($id, $len = 8, $mode = 1)
     {
         switch ($mode) {
-            case 1:return generateOrderNo('');break;
-            case 2:$alphabet = $this->getEnglishAlphabet($param);break;
-            default:$alphabet = $this->getMixtureAlphabet();break;
+            case 1:
+            case 2:
+            case 3:
+                $alphabet = $this->getEnglishAlphabet($mode);
+                break;
+            default:
+                $alphabet = $this->getMixtureAlphabet();
+                break;
         }
 
         $hashids = new Hashids(self::$salt, $len, $alphabet);

@@ -1,5 +1,4 @@
 <?php
-require_once(COMPOSER_DIR . 'autoload.php');
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;

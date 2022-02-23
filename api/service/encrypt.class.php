@@ -1,19 +1,12 @@
 <?php
 
-class encrypt
+class encrypt extends base
 {
 
     public $db;
     public $api;
 
-    private $url;
-    private $appId;                 // 分配的AppId
-    private $appSecret;             // 分配的AppSecret
-    private $token;                 // 分配的token
-    private $ver = '1.0.0';         // 版本号
-
-
-    public $key_resource;
+    private $key_resource;
 
     function __construct($api)
     {
@@ -21,47 +14,64 @@ class encrypt
     }
 
     /**
-     * 3DES加密转16进制
-     * @param $string
-     * @param $key
+     * 加密的2进制转16进制
+     * @param $bin
+     * @param bool $str_upper
      * @return string
      */
-    public function DesToHexEncrypt($string, $key)
+    public function hexEncode($bin, $str_upper = true)
     {
-        return strtoupper(bin2hex($this->des3_encrypt($string, $key)));
+        if ($str_upper) {
+            return strtoupper(bin2hex($bin));
+        }
+        return bin2hex($bin);
     }
 
     /**
-     * 3DES解密
-     * @param $string
-     * @param $key
-     * @return string
+     * 16进制转2进制秘闻
+     * @param $hex
+     * @param bool $str_lower
+     * @return false|string
      */
-    public function DesToBinDecrypt($string, $key)
+    public function hexDecode($hex, $str_lower = true)
     {
-        return $this->des3_decrypt(hex2bin(strtolower($string)), $key);
+        if ($str_lower) {
+            return hex2bin(strtolower($hex));
+        }
+        return hex2bin($hex);
     }
 
     /**
-     * AES-ECB加密并转16进制
-     * @param $string
-     * @param $key
-     * @return string
+     * 加密转base64编码
+     * @param $encrypt
+     * @param false $url_sale
+     * @return string|string[]
      */
-    public function AesToHexEncrypt($string, $key)
+    public function encodeBase64($encrypt, $url_sale = false)
     {
-        return strtoupper(bin2hex($this->aes_ecb_encrypt($string, $key)));
+        $base64 = base64_encode($encrypt);
+        if ($url_sale) {
+            $base64 = str_replace(['+', '/', '='], ['-', '_', ''], $base64);
+        }
+        return $base64;
     }
 
     /**
-     * AES-ECB解密
-     * @param $string
-     * @param $key
-     * @return string
+     * base64解码
+     * @param $base64
+     * @param false $url_sale
+     * @return false|string
      */
-    public function AesToBinDecrypt($string, $key)
+    public function decodeBase64($base64, $url_sale = false)
     {
-        return $this->aes_ecb_decrypt(hex2bin(strtolower($string)), $key);
+        if ($url_sale) {
+            $base64 = str_replace(['-', '_'], ['+', '/'], $base64);
+            $remainder = strlen($base64) % 4;
+            if ($remainder > 0) {
+                $base64 .= substr('====', $remainder);
+            }
+        }
+        return base64_decode($base64);
     }
 
     /**
@@ -109,13 +119,14 @@ class encrypt
     }
 
     /**
-     * rsaWithSha256加密
+     * rsaWithSha256签名
      * @param $toSign
      * @param $mode
      * @param string $pem_path
      * @return mixed
+     * @throws Exception
      */
-    function generateSign($toSign, $mode, $pem_path = '')
+    function signRsaWithSha256($toSign, $mode, $pem_path = '')
     {
         $this->checkRsaCert($mode, $pem_path);
         openssl_sign($toSign, $signature, $this->key_resource, OPENSSL_ALGO_SHA256);
@@ -130,84 +141,61 @@ class encrypt
      * @param string $mode
      * @param string $pem_path
      * @return integer
+     * @throws Exception
      */
-    function signVerify($string, $sign, $mode, $pem_path = '')
+    function verifySignRsaWithSha256($string, $sign, $mode, $pem_path = '')
     {
         $this->checkRsaCert($mode, $pem_path);
         return openssl_verify($string, base64_decode($sign), $this->key_resource, OPENSSL_ALGO_SHA256);
     }
 
     /**
-     * 生成待签名字符串
-     *
-     * @param array $param
+     * RSA加密（分段加密）
+     * @param $str
+     * @param string $mode
+     * @param string $pem_path
      * @return string
-     */
-    function toSignString($param)
-    {
-        ksort($param);
-        $num = 0;
-        $signString = '';
-        $filters = ['sign', 'req', 'respCode', 'respDesc'];
-        foreach ($param as $key => $value) {
-            if (!in_array($key, $filters)) {
-                if (is_array($value)) {
-                    $value = json_encode_ex($value);
-                }
-
-                if ($num === 0) {
-                    $signString .= "{$key}={$value}";
-                } else {
-                    $signString .= "&{$key}={$value}";
-                }
-                $num++;
-            }
-        }
-        return $signString;
-    }
-
-
-    /**
-     *  私钥加密（分段加密）
-     *  emptyStr    需要加密字符串
      */
     public function encrypt($str, $mode = 'public', $pem_path = '')
     {
-        $crypted = array();
+        $encrypted = array();
         $dataArray = str_split($str, 117);
 
         $this->checkRsaCert($mode, $pem_path);
 
         foreach ($dataArray as $subData) {
             if ($mode == 'public') {
-                openssl_public_encrypt($subData, $subCrypted, $this->key_resource);
+                openssl_public_encrypt($subData, $subEncrypted, $this->key_resource);
             } else {
-                openssl_private_encrypt($subData, $subCrypted, $this->key_resource);
+                openssl_private_encrypt($subData, $subEncrypted, $this->key_resource);
             }
-            $crypted[] = $subCrypted;
-            unset($subCrypted);
+            $encrypted[] = $subEncrypted;
+            unset($subEncrypted);
         }
 
-        $crypted = implode('', $crypted);
-        // return base64_encode($crypted);
-        return $crypted;
+        $encrypted = implode('', $encrypted);
+        return $encrypted;
     }
 
     /**
-     *  公钥解密（分段解密）
-     *  @encrypstr  加密字符串
+     * 解密（分段解密）
+     * @param $encrypt
+     * @param string $mode
+     * @param string $pem_type
+     * @param string $pem_path
+     * @return string
+     * @throws Exception
      */
-    public function decrypt($encryptstr, $mode = 'private', $pem_path = '')
+    public function decrypt($encrypt, $mode = 'RSA2', $pem_type = 'private', $pem_path = '')
     {
-        // $encryptstr = base64_decode($encryptstr);
         $decrypted = array();
-        $dataArray = str_split($encryptstr, 256);
-        // $dataArray = str_split($encryptstr, 128);
+        $split_len = $mode === 'RSA2' ? 256 : 128;
+        $dataArray = str_split($encrypt, $split_len);
 
-        $this->checkRsaCert($mode, $pem_path);
+        $this->checkRsaCert($pem_type, $pem_path);
 
         foreach ($dataArray as $subData) {
-            if ($mode == 'public') {
+            if ($pem_type == 'public') {
                 openssl_public_decrypt($subData, $subDecrypted, $this->key_resource);
             } else {
                 openssl_private_decrypt($subData, $subDecrypted, $this->key_resource);
@@ -220,6 +208,12 @@ class encrypt
     }
 
 
+    /**
+     * 验证并加载证书资源
+     * @param $mode
+     * @param string $pem_path
+     * @throws Exception
+     */
     private function checkRsaCert($mode, $pem_path = '')
     {
 
@@ -231,40 +225,38 @@ class encrypt
                 $cert_path = $pem_path ?: RSA_PRI_PATH;
                 break;
             default:
-                $this->api->dataerror('加密选项错误！');
+                throw new Exception("加密选项错误!");
                 break;
         }
-
 
         $this->loadingCert($cert_path, $mode);
         if (empty($this->key_resource)) {
-            $this->api->dataerror('密钥读取失败！');
+            throw new Exception("密钥读取失败!");
         }
     }
 
-
-
     /**
      * RSA constructor.
-     * @param string $KeyPath
-     * @param string $cert_type 证书类型: pub  pri
+     * @param string $cert_path
+     * @param string $cert_type 证书类型: public  private
+     * @return bool
      * @throws Exception
      */
-    public function loadingCert($KeyPath, $cert_type)
+    public function loadingCert($cert_path, $cert_type)
     {
         switch ($cert_type) {
             case "public":
-                if ($this->checkKeyFile($KeyPath)) {
-                    $pubkey_str = file_get_contents($KeyPath);
-                    $pubkey_str = $this->formatterPublicKey($pubkey_str);
-                    $this->key_resource = openssl_pkey_get_public($pubkey_str);
+                if ($this->checkKeyFile($cert_path)) {
+                    $public_key = file_get_contents($cert_path);
+                    $public_key = $this->formatterPublicKey($public_key);
+                    $this->key_resource = openssl_pkey_get_public($public_key);
                 }
                 break;
             case "private":
-                if ($this->checkKeyFile($KeyPath)) {
-                    $prikey_str = file_get_contents($KeyPath);
-                    $prikey_str = $this->formatterPrivateKey($prikey_str);
-                    $this->key_resource = openssl_pkey_get_private($prikey_str);
+                if ($this->checkKeyFile($cert_path)) {
+                    $private_key = file_get_contents($cert_path);
+                    $private_key = $this->formatterPrivateKey($private_key);
+                    $this->key_resource = openssl_pkey_get_private($private_key);
                 }
                 break;
             default:
@@ -311,7 +303,7 @@ class encrypt
 
     /**
      * 格式化私钥
-     * @param $privateKey string 公钥
+     * @param $privateKey string 私钥
      * @return string
      */
     public function formatterPrivateKey($privateKey)

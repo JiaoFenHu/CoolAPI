@@ -1,7 +1,5 @@
 <?php
 
-global $db;
-
 class orm
 {
     private $db;

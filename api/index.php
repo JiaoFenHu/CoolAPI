@@ -7,8 +7,9 @@
  * @desc 入口文件
  */
 header('Access-Control-Allow-Origin:*');
-require_once('globals.php');
-require_once(INC_DIR . 'config.php');
+require('globals.php');
+require(INC_DIR . 'config.php');
+require(COMPOSER_DIR . 'autoload.php');
 
 $api = new api("controller");
 

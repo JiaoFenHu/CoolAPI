@@ -3,47 +3,36 @@ $this->subset_api = array('name' => 'demo');
 if (isset($this->module)) {
     $that = $this->module;
     //配置公用参数
-    $this->infoarr['token'] = array('type' => 'string', 'summary' => 'token');
-    $this->infoarr['id'] = array('type' => 'int', 'summary' => 'id');
-    $this->infoarr['hashId'] = array('type' => 'string', 'summary' => 'hashId密文');
-    $this->infoarr['length'] = array('type' => 'int', 'summary' => '密文长度');
-    $this->infoarr['mode'] = array('type' => 'int', 'summary' => '类型', 'list' => [1 => '纯数字', 2 => '纯英文', 3 => '混合']);
-    $this->infoarr['pattern'] = array('type' => 'int', 'summary' => '选项', 'default' => 1);
+    $this->doc_param['token'] = array('type' => 'string', 'summary' => 'token');
+    $this->doc_param['id'] = array('type' => 'int', 'summary' => 'id');
+    $this->doc_param['hashId'] = array('type' => 'string', 'summary' => 'hashId密文');
+    $this->doc_param['length'] = array('type' => 'int', 'summary' => '密文长度');
+    $this->doc_param['mode'] = array('type' => 'int', 'summary' => '类型', 'list' => [1 => '纯数字', 2 => '纯英文', 3 => '混合']);
+    $this->doc_param['pattern'] = array('type' => 'int', 'summary' => '选项', 'default' => 1);
 
     if (empty($this->req)) {
         return;
     }
 }
 
-$this->info = array('req' => 'hashids');
-$this->info['summary'] = 'hashid混淆加密';
-if ($this->checkthisapi()) {
+$this->info = array('req' => 'test');
+$this->info['summary'] = '测试';
+if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
     $this->parameter = array();
     $this->fields = array();
-    $param = $this->apiinit();
+    $param = $this->apiInit();
     //具体执行代码
-    $hashIds = include_class($this, "hashId");
+    $jwt = $this->loadService("jwtAuthorize");
 
-    // $data['hashId'] = $hashIds->getHashIdString($param['id'], $param['length'], $param['mode'], $param['pattern']);
-    // $set = [
-    //     'd.manager' => '17610062223',
-    //     'd.name[!]' => '123123',
-    //     'd.name[~]' => '123123%',
-    //     's_group' => 'd.name',
-    //     'order' => ['did' => 'DESC'],
-    //     'having' => ['#@count(d.name)[>=]' => 2]
-    // ];
-    // $join = [
-    //     '[>]department_job(dj)' => ['d.tbid' => 'dj.department_id']
-    // ];
-    // $column = ['d.name[dname]','d.type[dtype]', 'd.tbid[did]'];
-    // $this->db->select('department(d)', $join, $column, $set);
-
-    echo get_env("mgk.param.ds");
-    exit;
+    $token = $jwt->createToken(1);
+    prints($token, true, false);
+    // eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsIm5hbWUiOiJ0ZXN0In0.eyJpc3MiOiJodHRwczpcL1wvaHpzbWsubG9va2JpLmNvbVwvIiwiYXVkIjoiaHR0cHM6XC9cL2h6c21rLmxvb2tiaS5jb21cLyIsImp0aSI6IjExYlJuWGtsYkFWTjAzVTMiLCJpYXQiOjE2NDU2MDg5NDUsIm5iZiI6MTY0NTYwODk0NSwiZXhwIjoxNjQ1Njk1MzQ1LCJtZW1iZXJfaWQiOjF9.QX_AvQk7JO5geCIMjN7Mw_tg_UCjBzbfam8mr9BdrOs
     //输出返回数据
-    $this->echodata($data);
+    $parse = $jwt->parseToken($token);
+    prints($parse, false);
+
+    $this->outputResponseData($data);
 }
 //添加所有接口参数
 $this->addsubset();
