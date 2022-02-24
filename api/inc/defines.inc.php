@@ -8,8 +8,7 @@ define('SHOW_API', true); // 配置是否展示api文档，如果无此常量就
 
 //token有效期，单位小时
 define('VALIDITY', 24);
-//随机加密码
-define('PRO_KEY', 'QYDv^bej*prDv&ZI');
+define('TOKEN_KEY', 'AUTH_TOKEN');
 
 /**
  * 上传类型

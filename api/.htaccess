@@ -1,11 +1,13 @@
 <IfModule mod_rewrite.c>
  RewriteEngine on
+ # 开启$_SERVER 函数获取特殊header：Authorization的值
+ SetEnvIf Authorization .+ HTTP_AUTHORIZATION=$0
  
  DirectoryIndex index.html index.php
  
  RewriteCond %{REQUEST_FILENAME} !-d
  RewriteCond %{REQUEST_FILENAME} !-f
- 
+
  RewriteRule ^(.*[^/])$ $1/ 
  RewriteRule ^([^/]*)/(.*)/$ $1.$2/
  

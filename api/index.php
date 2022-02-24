@@ -49,6 +49,8 @@ class api
     private $open_api_log;
     #接口日志服务
     private $interfaceLogService;
+    #用户id
+    public $member_id;
 
     public function __construct($app)
     {
@@ -83,12 +85,17 @@ class api
                 ]);
             }
 
-            $this->req = explode('.', $_REQUEST['req']);
-            $this->module_name = array_shift($this->req);
-            $this->req = implode('.', $this->req);
-            $this->module = $this->loadService($this->module_name);
-            $this->initParamDoc();
-            $this->includeFile($this->interface_dir . "/" . $this->module_name . '.php');
+            // 全局捕获异常
+            try {
+                $this->req = explode('.', $_REQUEST['req']);
+                $this->module_name = array_shift($this->req);
+                $this->req = implode('.', $this->req);
+                $this->module = $this->loadService($this->module_name);
+                $this->initParamDoc();
+                $this->includeFile($this->interface_dir . "/" . $this->module_name . '.php');
+            } catch (Throwable $e) {
+                $this->outputResponseError($e->getMessage());
+            }
             if ($this->debug == 1) {
                 $this->outputResponseError('请确认接口类型' . $this->module_name . '-' . $this->req);
             }
@@ -374,8 +381,11 @@ class api
     {
         if (empty($params)) {
             $params = $this->param;
+            if (is_array($parameter) && array_key_exists('token', $parameter)) {
+                $params['token'] = $_SERVER['HTTP_' . TOKEN_KEY] ?: null;
+            }
         }
-        if (!empty($parameter)) {
+        if (!empty($parameter) && is_array($params)) {
             if (empty($file)) {
                 $file = $_FILES;
             }
