@@ -23,7 +23,7 @@ function json_encode_ex($value)
  * @param string $conf_name
  * @return mixed
  */
-function get_env($conf_name)
+function get_env(string $conf_name)
 {
     static $env_configs = [];
     if (empty($env_configs)) {
@@ -57,7 +57,7 @@ function get_env($conf_name)
  * @param integer $s_mode
  * @return void
  */
-function get_img($img, $mode = 0, $s_mode = 0)
+function get_img(string $img, $mode = 0, $s_mode = 0)
 {
     $img = explode(FILE_SPLIT, $img);
     foreach ($img as &$value) {
@@ -93,7 +93,7 @@ function get_img($img, $mode = 0, $s_mode = 0)
  * @param string $avatar
  * @return array|string
  */
-function get_avatar($avatar)
+function get_avatar(string $avatar)
 {
     if (empty($avatar)) {
         return get_img('libs/avatar.jpg', 1);
@@ -104,7 +104,7 @@ function get_avatar($avatar)
 
 /**
  * 入库图片处理
- * @param $img
+ * @param mixed $img
  * @return string
  */
 function remove_domain($img)
@@ -135,23 +135,10 @@ function remove_domain($img)
 
 
 /**
- * api加载class并初始化
- * @param object $api
- * @param string $class
- * @return stdClass
- */
-function include_class($api, $class)
-{
-    $api->include_file($api->infodir . DIRECTORY_SEPARATOR . $class . ".class.php");
-    return $$class = new $class($api);
-}
-
-
-/**
  * 创建文件目录
- * @param $dir
+ * @param string $dir
  */
-function create_dirs($dir)
+function create_dirs(string $dir)
 {
     if (!is_dir($dir)) {
         $temp = explode(DIRECTORY_SEPARATOR, $dir);
@@ -171,7 +158,7 @@ function create_dirs($dir)
  * @param string $end
  * @return string
  */
-function generate_unique_code($pre, $end = '')
+function generate_unique_code(string $pre, string $end = '')
 {
     $yCode = array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P');
     $orderSn = $yCode[intval(date('Y')) - 2017] . strtoupper(dechex(date('m'))) . date('d') . substr(time(), -5) . substr(microtime(), 2, 5) . sprintf('%02d', rand(0, 99));
@@ -188,7 +175,7 @@ function generate_unique_code($pre, $end = '')
  * @param integer $time_out
  * @return string
  */
-function get_curl_content($url, $method = 'GET', $data = [], $header = [], $time_out = 10)
+function get_curl_content(string $url, string $method = 'GET', array $data = [], array $header = [], int $time_out = 10)
 {
     $method = strtoupper($method);
     if (!empty($data) && $method == 'GET') {
@@ -206,11 +193,11 @@ function get_curl_content($url, $method = 'GET', $data = [], $header = [], $time
 
     if (!empty($header)) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-        if (in_array('Content-Type:application/json', $header) && $method == 'POST') {
-            $data = json_encode_ex($data);
-        }
     }
     if ($method == 'POST') {
+        if (in_array('Content-Type:application/json', $header)) {
+            $data = json_encode_ex($data);
+        }
         curl_setopt($ch, CURLOPT_POST, 1); //post提交方式
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
     }
@@ -416,7 +403,7 @@ function is_https()
  * @param int $int
  * @return bool
  */
-function int2bool($int)
+function int2bool(int $int)
 {
     return $int != 0;
 }
@@ -427,7 +414,7 @@ function int2bool($int)
  * @param string $mobile
  * @return bool
  */
-function check_mobile($mobile)
+function check_mobile(string $mobile)
 {
     $preg = '/^1([38][0-9]|4[579]|5[0-3,5-9]|6[6]|7[0135678]|9[89])\d{8}$/';
     if (!preg_match($preg, $mobile)) {
@@ -444,7 +431,7 @@ function check_mobile($mobile)
  * @param int $repeat_mi *号重复数量
  * @return string
  */
-function string_fuzzy($string, $be = 3, $en = 4, $repeat_mi = 4)
+function string_fuzzy(string $string, $be = 3, $en = 4, $repeat_mi = 4)
 {
     $return_str = '';
     $return_str .= substr($string, 0, $be);
@@ -455,10 +442,10 @@ function string_fuzzy($string, $be = 3, $en = 4, $repeat_mi = 4)
 
 /**
  * 删除数组数字下标
- * @param $db_data
+ * @param array $db_data
  * @return array
  */
-function remove_key_number($db_data)
+function remove_key_number(array $db_data)
 {
     $return_data = [];
     if (!empty($db_data) && is_array($db_data)) {
@@ -481,7 +468,7 @@ function remove_key_number($db_data)
  * @param integer $mode	选项
  * @return string
  */
-function generate_random_code($length = 16, $mode = 2)
+function generate_random_code(int $length = 16, int $mode = 2)
 {
     $randoms = [
         '0123456789',
@@ -533,7 +520,7 @@ function multi_array_sort()
  * @param int $limit
  * @return array
  */
-function page_array($data, $from, $limit)
+function page_array(array $data, int $from, int $limit)
 {
     return array_slice($data, $from, $limit);
 }
@@ -544,20 +531,24 @@ function page_array($data, $from, $limit)
  * @param string $ipv4
  * @return array|string
  */
-function get_ip_address($ipv4)
+function get_ip_address(string $ipv4)
 {
     include(LIB_DIR . "ip2region/Ip2Region.class.php");
 
     $ip2region  = new Ip2Region(LIB_DIR . 'ip2region/data/ip2region.db');
     try {
-        $ipInfos = $ip2region->btreeSearch($ipv4);
-        return $ipInfos;
+        return $ip2region->btreeSearch($ipv4);
     } catch (Exception $e) {
         return $e->getMessage();
     }
 }
 
-function prints($data, $is_dump = true, $die = true)
+/**
+ * @param mixed $data
+ * @param bool $is_dump
+ * @param bool $die
+ */
+function prints($data, bool $is_dump = true, bool $die = true)
 {
     if ($is_dump) {
         var_dump($data);
