@@ -2,13 +2,9 @@
 
 class encrypt extends base
 {
-
-    public $db;
-    public $api;
-
     private $key_resource;
 
-    function __construct($api)
+    function __construct(api $api)
     {
         $this->api = $api;
     }

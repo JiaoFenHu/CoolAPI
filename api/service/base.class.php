@@ -1,6 +1,7 @@
 <?php
 class base extends orm
 {
+    protected $api;
     /**
      * 初始化接口请求参数
      * @return array|mixed

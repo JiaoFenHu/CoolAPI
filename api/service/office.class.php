@@ -6,15 +6,12 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class office extends base
 {
-    public $db;
-    public $api;
-
     private $sheet_title = 'sheetReport';
     private $horizontal = 'center';
     private $vertical = 'center';
     private $columnWidth = [];
 
-    function __construct($api)
+    function __construct(api $api)
     {
         $this->api = $api;
     }

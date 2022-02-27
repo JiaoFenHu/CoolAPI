@@ -12,8 +12,10 @@ class orm
      */
     protected function initDB()
     {
-        global $db;
-        $this->db = $db;
+        if (!($this->db instanceof DB)) {
+            global $db;
+            $this->db = $db;
+        }
     }
 
     /**

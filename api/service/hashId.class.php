@@ -4,11 +4,9 @@ use Hashids\Hashids;
 
 class hashId extends base
 {
-    public $api;
+    private static $salt = '1one_';
 
-    private static $salt = '1one_' . PRO_KEY;
-
-    function __construct($api)
+    function __construct(api $api)
     {
         $this->api = $api;
     }
