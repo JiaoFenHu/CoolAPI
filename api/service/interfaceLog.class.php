@@ -1,10 +1,7 @@
 <?php
 class interfaceLog extends base
 {
-	public $db;
-	public $api;
-
-	function __construct($api)
+	function __construct(api $api)
 	{
 		$this->api = $api;
 		$this->table_name = 'interface_log';

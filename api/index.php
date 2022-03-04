@@ -805,7 +805,7 @@ class api
     public function loadService($service_name)
     {
         $this->includeFile(SERVICE_DIR . $service_name . ".class.php");
-        return $$service_name = new $service_name($this);
+        return new $service_name($this);
     }
 
     /**

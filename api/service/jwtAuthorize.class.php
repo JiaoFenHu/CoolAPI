@@ -10,8 +10,6 @@ use Lcobucci\JWT\Token;
 
 class jwtAuthorize extends base
 {
-    public $api;
-
     private $signer;
     private $key;
 
