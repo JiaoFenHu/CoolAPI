@@ -8,10 +8,6 @@ if (isset($this->module)) {
     $this->doc_param['length'] = array('type' => 'int', 'summary' => '密文长度');
     $this->doc_param['mode'] = array('type' => 'int', 'summary' => '类型', 'list' => [1 => '纯数字', 2 => '纯英文', 3 => '混合']);
     $this->doc_param['pattern'] = array('type' => 'int', 'summary' => '选项', 'default' => 1);
-
-    if (empty($this->req)) {
-        return;
-    }
 }
 
 $this->info = array('req' => 'test');
