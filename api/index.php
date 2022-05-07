@@ -49,6 +49,8 @@ class api
     private $open_api_log;
     #接口日志服务
     private $interfaceLogService;
+
+    private static $module_instances = [];
     #用户id
     public $member_id;
 
@@ -65,7 +67,7 @@ class api
             $_REQUEST['req'] = $options['q'];
         }
 
-        // 查看文档
+        // 文档
         if ($_REQUEST['req'] == 'doc') {
             $this->api = ['api_name' => PLATFORM . '接口文档'];
             $this->listDir();
@@ -804,8 +806,16 @@ class api
      */
     public function loadService($service_name)
     {
+        if (
+            array_key_exists($service_name, self::$module_instances)
+            && self::$module_instances[$service_name] instanceof $service_name
+        ) {
+            return self::$module_instances[$service_name];
+        }
+
         $this->includeFile(SERVICE_DIR . $service_name . ".class.php");
-        return new $service_name($this);
+        self::$module_instances[$service_name] = new $service_name($this);
+        return self::$module_instances[$service_name];
     }
 
     /**
