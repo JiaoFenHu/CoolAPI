@@ -2,20 +2,28 @@
 
 /**
  * 对变量进行 JSON 编码
- * @param mixed value 待编码的 value ，除了resource 类型之外，可以为任何数据类型，该函数只能接受 UTF-8 编码的数据
- * @return string 返回 value 值的 JSON 形式
+ * @param $value
+ * @param false $isEncodeChinese
+ * @param false $isEncodeUrl
+ * @return false|string
  */
-function json_encode_ex($value)
+function jsonEncodeExtend($value, bool $isEncodeChinese = false, bool $isEncodeUrl = false)
 {
-    if (version_compare(PHP_VERSION, '5.4.0', '<')) {
-        $str = json_encode($value);
-        $str = preg_replace_callback("#\\\u([0-9a-f]{4})#i", function ($matches) {
-            return iconv('UCS-2BE', 'UTF-8', pack('H4', $matches[1]));
-        }, $str);
-        return $str;
-    } else {
-        return json_encode($value, JSON_UNESCAPED_UNICODE);
+    switch (true) {
+        case ($isEncodeChinese && $isEncodeUrl):
+            $encode = json_encode($value, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            break;
+        case $isEncodeChinese:
+            $encode = json_encode($value, JSON_UNESCAPED_UNICODE);
+            break;
+        case $isEncodeUrl:
+            $encode = json_encode($value, JSON_UNESCAPED_SLASHES);
+            break;
+        default:
+            $encode = json_encode($value);
+            break;
     }
+    return $encode;
 }
 
 /**
@@ -23,7 +31,7 @@ function json_encode_ex($value)
  * @param string $conf_name
  * @return mixed
  */
-function get_env(string $conf_name)
+function getProEnv(string $conf_name)
 {
     static $env_configs = [];
     if (empty($env_configs)) {
@@ -57,7 +65,7 @@ function get_env(string $conf_name)
  * @param integer $s_mode
  * @return void
  */
-function get_img(string $img, $mode = 0, $s_mode = 0)
+function getImg(string $img, $mode = 0, $s_mode = 0)
 {
     $img = explode(FILE_SPLIT, $img);
     foreach ($img as &$value) {
@@ -93,13 +101,13 @@ function get_img(string $img, $mode = 0, $s_mode = 0)
  * @param string $avatar
  * @return array|string
  */
-function get_avatar(string $avatar)
+function getAvatar(string $avatar)
 {
     if (empty($avatar)) {
-        return get_img('libs/avatar.jpg', 1);
+        return getImg('libs/avatar.jpg', 1);
     }
 
-    return get_img($avatar, 1);
+    return getImg($avatar, 1);
 }
 
 /**
@@ -107,7 +115,7 @@ function get_avatar(string $avatar)
  * @param mixed $img
  * @return string
  */
-function remove_domain($img)
+function removeDomain($img)
 {
     if (!empty($img)) {
         if (!is_array($img)) {
@@ -138,7 +146,7 @@ function remove_domain($img)
  * 创建文件目录
  * @param string $dir
  */
-function create_dirs(string $dir)
+function createDirs(string $dir)
 {
     if (!is_dir($dir)) {
         $temp = explode(DIRECTORY_SEPARATOR, $dir);
@@ -158,7 +166,7 @@ function create_dirs(string $dir)
  * @param string $end
  * @return string
  */
-function generate_unique_code(string $pre, string $end = '')
+function generateUniqueCode(string $pre, string $end = '')
 {
     $yCode = array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P');
     $orderSn = $yCode[intval(date('Y')) - 2017] . strtoupper(dechex(date('m'))) . date('d') . substr(time(), -5) . substr(microtime(), 2, 5) . sprintf('%02d', rand(0, 99));
@@ -175,7 +183,7 @@ function generate_unique_code(string $pre, string $end = '')
  * @param integer $time_out
  * @return string
  */
-function get_curl_content(string $url, string $method = 'GET', array $data = [], array $header = [], int $time_out = 10)
+function getCurlContent(string $url, string $method = 'GET', array $data = [], array $header = [], int $time_out = 10)
 {
     $method = strtoupper($method);
     if (!empty($data) && $method == 'GET') {
@@ -214,7 +222,7 @@ function get_curl_content(string $url, string $method = 'GET', array $data = [],
  * @param $num
  * @return string|null
  */
-function to_chinese_number($num)
+function toChineseNumber($num)
 {
     $char = array("零", "一", "二", "三", "四", "五", "六", "七", "八", "九");
     $dw = array("", "十", "百", "千", "万", "亿", "兆");
@@ -243,7 +251,7 @@ function to_chinese_number($num)
  * @param boolean $is_long 0返回IP地址，1返回IPV4数字地址
  * @return mixed
  */
-function get_ip($is_long = false)
+function getClientIp($is_long = false)
 {
     $type = $is_long ? 1 : 0;
     static $ip = NULL;
@@ -384,7 +392,7 @@ function xml2array($xml)
  * 判断当前协议是否为HTTPS
  * @return string
  */
-function is_https()
+function isHttps()
 {
     $is_https = false;
     if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') {
@@ -414,7 +422,7 @@ function int2bool(int $int)
  * @param string $mobile
  * @return bool
  */
-function check_mobile(string $mobile)
+function checkMobile(string $mobile)
 {
     $preg = '/^1([38][0-9]|4[579]|5[0-3,5-9]|6[6]|7[0135678]|9[89])\d{8}$/';
     if (!preg_match($preg, $mobile)) {
@@ -431,7 +439,7 @@ function check_mobile(string $mobile)
  * @param int $repeat_mi *号重复数量
  * @return string
  */
-function string_fuzzy(string $string, $be = 3, $en = 4, $repeat_mi = 4)
+function stringFuzzy(string $string, $be = 3, $en = 4, $repeat_mi = 4)
 {
     $return_str = '';
     $return_str .= substr($string, 0, $be);
@@ -445,13 +453,13 @@ function string_fuzzy(string $string, $be = 3, $en = 4, $repeat_mi = 4)
  * @param array $db_data
  * @return array
  */
-function remove_key_number(array $db_data)
+function removeKeyNumber(array $db_data)
 {
     $return_data = [];
     if (!empty($db_data) && is_array($db_data)) {
         foreach ($db_data as $db_key => $db_val) {
             if (is_array($db_val)) {
-                $return_data[$db_key] = remove_key_number($db_val);
+                $return_data[$db_key] = removeKeyNumber($db_val);
             } else {
                 if (!is_numeric($db_key)) {
                     $return_data[$db_key] = $db_val;
@@ -464,11 +472,12 @@ function remove_key_number(array $db_data)
 
 /**
  * 获取随机字符串
- * @param integer $length	随机字符串长度
- * @param integer $mode	选项
+ * @param integer $length 随机字符串长度
+ * @param integer $mode 选项
  * @return string
+ * @throws Exception
  */
-function generate_random_code(int $length = 16, int $mode = 2)
+function generateRandomCode(int $length = 16, int $mode = 2)
 {
     $randoms = [
         '0123456789',
@@ -483,7 +492,7 @@ function generate_random_code(int $length = 16, int $mode = 2)
     $codeLen = count($codeSet) - 1;
     $nonceStr = '';
     for ($i = 0; $i < $length; $i++) {
-        $nonceStr .= $codeSet[mt_rand(0, $codeLen)];
+        $nonceStr .= $codeSet[random_int(0, $codeLen)];
     }
     return $nonceStr;
 }
@@ -492,7 +501,7 @@ function generate_random_code(int $length = 16, int $mode = 2)
  * 对二维数组的一/多个字段进行排序
  * @return bool|mixed|null
  */
-function multi_array_sort()
+function multiArraySort()
 {
     $args = func_get_args();
     if (empty($args)) {
@@ -520,18 +529,17 @@ function multi_array_sort()
  * @param int $limit
  * @return array
  */
-function page_array(array $data, int $from, int $limit)
+function pageArray(array $data, int $from, int $limit)
 {
     return array_slice($data, $from, $limit);
 }
 
 /**
  * 根据ip获取地理地址信息
- *
  * @param string $ipv4
  * @return array|string
  */
-function get_ip_address(string $ipv4)
+function getIpAddress(string $ipv4)
 {
     include(LIB_DIR . "ip2region/Ip2Region.class.php");
 
@@ -541,6 +549,27 @@ function get_ip_address(string $ipv4)
     } catch (Exception $e) {
         return $e->getMessage();
     }
+}
+
+/**
+ * 获取http请求头
+ * @return array|false
+ */
+function getRequestHeaders()
+{
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+    } elseif (function_exists('http_get_request_headers')) {
+        $headers = http_get_request_headers();
+    } else {
+        $headers = [];
+        foreach ($_SERVER as $name => $value) {
+            if (substr($name, 0, 5) == 'HTTP_') {
+                $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+            }
+        }
+    }
+    return $headers;
 }
 
 /**

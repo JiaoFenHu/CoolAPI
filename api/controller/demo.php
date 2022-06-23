@@ -14,11 +14,14 @@ $this->info = array('req' => 'test');
 $this->info['summary'] = '测试';
 if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
-    $this->parameter = array('token');
+    $this->headers = array('token');
+    $this->parameter = array();
     $this->fields = array();
     $param = $this->apiInit();
     //具体执行代码
     $jwt = $this->loadService("jwtAuthorize");
+
+    prints(getRequestHeaders(), false);
 
     // $token = $jwt->createToken(['member_id' => 1], 1);
     // prints($token, true, false);
@@ -31,7 +34,7 @@ if ($this->checkThisApi()) {
 
     $that->test();
 
-    $this->outputResponseData($data);
+    $this->responseOk($data);
 }
 //添加所有接口参数
 $this->addsubset();

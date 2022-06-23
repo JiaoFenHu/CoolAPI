@@ -1,6 +1,6 @@
 <?php
 
-class orm
+class orm implements interfaceORM
 {
     private $db;
 

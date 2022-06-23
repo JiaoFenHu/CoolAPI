@@ -25,7 +25,7 @@ class jwtAuthorize extends base
     private function getConfigure() : Configuration
     {
         $this->signer = new Sha256();
-        $this->key = InMemory::base64Encoded(get_env("jwt.secret"));
+        $this->key = InMemory::base64Encoded(getProEnv("jwt.secret"));
         return Configuration::forSymmetricSigner(
             $this->signer,
             $this->key
@@ -82,7 +82,8 @@ class jwtAuthorize extends base
             $configure = $this->getConfigure();
             $token = $configure->parser()->parse($token);
 
-            $this->api->member_id = $token->claims()->get('member_id');
+            $user_id = $token->claims()->get('member_id');
+            $this->api->member_id = $user_id * 1;
 
             // 以下验证token各项值是否符合签发的值代码
             $this->checkTokenSignedWith($token);
@@ -95,9 +96,9 @@ class jwtAuthorize extends base
             $this->checkTokenClaims($token->claims()->get('jti'), 'jti');
 
         } catch (ConstraintViolation $e) {
-            $this->api->outputResponseError($e->getMessage());
+            $this->api->responseError($e->getMessage());
         } catch (CannotDecodeContent $e) {
-            $this->api->outputResponseError("身份验证失败，您正在非法操作，已记录您的IP！");
+            $this->api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
         }
         return true;
     }

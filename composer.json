@@ -1,10 +1,10 @@
 {
     "name": "1one/interface.v1",
     "require": {
-        "phpoffice/phpspreadsheet": "1.22.0",
-        "hashids/hashids": "^4.1",
-        "monolog/monolog": "^2.3",
-        "lcobucci/jwt": "^3.4"
+        "phpoffice/phpspreadsheet": "1.19.0",
+        "hashids/hashids": "4.1.0",
+        "monolog/monolog": "2.7.0",
+        "lcobucci/jwt": "3.4.6"
     },
     "autoload": {
         "psr-4": {
