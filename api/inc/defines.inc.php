@@ -8,7 +8,6 @@ define('SHOW_API', true); // 配置是否展示api文档，如果无此常量就
 
 //token有效期，单位小时
 define('VALIDITY', 24);
-define('TOKEN_KEY', 'AUTH_TOKEN');
 
 /**
  * 上传类型
@@ -43,7 +42,7 @@ define('MESSAGE_SECRETKEY', '6eef104ed6e80736ee310686b16337f0');
 define('MESSAGE_SIGNAME', '易网测试');
 define('MESSAGE_MODE', 'ALIDAYU');
 define('MESSAGE_TEMPLATE', 'SMS_10795433');
-define('MESSAGE_TEMPLATE_LIST', json_encode(array(
+define('MESSAGE_TEMPLATE_LIST', [
     'REGISTERED' => array('name' => '注册', 'template' => 'SMS_2550004'),
     'RETRIEVE_PASSWORD' => array('name' => '找回密码', 'template' => 'SMS_10795433'),
     'MODIFY_PAYMENT_PASSWORD' => array('name' => '修改支付密码', 'template' => 'SMS_10795433'),
@@ -52,5 +51,5 @@ define('MESSAGE_TEMPLATE_LIST', json_encode(array(
     'REPLACE_PHONE_NEW' => array('name' => '更换绑定手机', 'template' => 'SMS_10795433'),
     'REPLACE_PHONE_OLD' => array('name' => '绑定手机', 'template' => 'SMS_10795433'),
     'SMS_LOGIN' => array('name' => '短信登录', 'template' => 'SMS_10795433'),
-)));
+]);
 

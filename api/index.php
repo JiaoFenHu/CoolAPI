@@ -15,14 +15,19 @@ $api = new api("controller");
 
 class api
 {
+    const CODE_OK = 200;    // 请求响应成功
+    const CODE_LOGIN_VALID = 401;   // 登录失效，未登录
+    const CODE_LACK_PARAM = 403;    // 缺少参数
+    const CODE_ERROR = 500; // 请求响应异常
+
     #接口文档数组
     public array $api = [];
     #接口文档单个接口数组
     public array $info = [];
     #接口文档预配置参数数组
-    public array $doc_params = [];
+    public array $docParams = [];
     #接口文档模块数组
-    public array $subset_api = [];
+    public array $subsetApi = [];
     #接口文档模块输入参数
     public array $parameter = [];
     #接口文档模块输出参数
@@ -34,25 +39,25 @@ class api
     #接口req参数
     public $req;
     #模块名
-    public $module_name;
+    public $moduleName;
     #模块类
-    public $module;
+    public bool $loadFieldDoc = false;
     #日志id
-    public string $log_id;
+    public string $logId;
     #db
     public DB $db;
     #接口目录
-    private string $interface_dir;
+    private string $interfaceDir;
     #debug
     private bool $debug;
     #接口访问日志开关
-    private bool $open_api_log;
+    private bool $openApiLog;
     #接口日志服务
     private interfaceLog $interfaceLogService;
     #实例化service组
-    private static array $module_instances = [];
+    private static array $moduleInstances = [];
     #用户ID
-    public ?int $member_id;
+    public ?int $memberId;
     #token
     public array $headers = [];
 
@@ -60,9 +65,9 @@ class api
     {
         global $db;
         $this->db = $db;
-        $this->debug = getProEnv('system.open_api_debug');
-        $this->interface_dir = API_DIR . $app;
-        $this->open_api_log = getProEnv('system.open_request_log');
+        $this->debug = getProEnv('system.openApiDebug');
+        $this->interfaceDir = API_DIR . $app;
+        $this->openApiLog = getProEnv('system.openRequestLog');
 
         $options = getopt("q:");
         if (!empty($options)) {
@@ -78,31 +83,32 @@ class api
 
         // 接口
         if (!empty($_REQUEST['req']) && $_REQUEST['req'] !== 'doc') {
-            include(INC_DIR . 'interfaceORM.php');
-            include(INC_DIR . 'orm.class.php');
-            include(SERVICE_DIR . 'base.class.php');
-            if ($this->open_api_log) {
-                $this->interfaceLogService = $this->loadService("interfaceLog");
-                $this->log_id = $this->interfaceLogService->add([
-                    'ip' => getClientIp(),
-                    'url' => $_SERVER['SCRIPT_NAME'],
-                    'api' => $_REQUEST['req'],
-                ]);
-            }
 
             // 全局捕获异常
             try {
+                include(INC_DIR . 'interfaceORM.php');
+                include(INC_DIR . 'orm.class.php');
+                include(SERVICE_DIR . 'base.class.php');
+                if ($this->openApiLog) {
+                    $this->interfaceLogService = $this->loadService("interfaceLog");
+                    $this->logId = $this->interfaceLogService->add([
+                        'ip' => getClientIp(),
+                        'url' => $_SERVER['SCRIPT_NAME'],
+                        'api' => $_REQUEST['req'],
+                    ]);
+                }
+
                 $this->req = explode('.', $_REQUEST['req']);
-                $this->module_name = array_shift($this->req);
+                $this->moduleName = array_shift($this->req);
                 $this->req = implode('.', $this->req);
-                $this->module = $this->loadService($this->module_name);
+                $this->loadFieldDoc = true;
                 $this->initParamDoc();
-                $this->includeFile($this->interface_dir . "/" . $this->module_name . '.php');
+                $this->includeFile($this->interfaceDir . "/" . $this->moduleName . '.php');
             } catch (Throwable $e) {
                 $this->responseError($e->getMessage());
             }
             if ($this->debug == 1) {
-                $this->responseError('请确认接口类型' . $this->module_name . '-' . $this->req);
+                $this->responseError('请确认接口类型' . $this->moduleName . '-' . $this->req);
             }
         }
         $this->responseError('No Permission To Access Interface Documents!');
@@ -113,13 +119,13 @@ class api
      */
     private function initParamDoc()
     {
-        $this->doc_params['list'] = ['type' => 'array', 'summary' => '列表数据'];
-        $this->doc_params['from'] = ['type' => 'int', 'summary' => '每页开始条数'];
-        $this->doc_params['limit'] = ['type' => 'int', 'summary' => '每页条目数'];
-        $this->doc_params['count'] = ['type' => 'int', 'summary' => '总数量'];
-        $this->doc_params['success'] = ['type' => 'bool', 'summary' => '是否成功'];
-        $this->doc_params['create_time'] = ['type' => 'datetime', 'summary' => '创建时间'];
-        $this->doc_params['token'] = ['type' => 'string', 'summary' => 'token'];
+        $this->docParams['records'] = ['type' => 'array', 'summary' => '列表数据'];
+        $this->docParams['from'] = ['type' => 'int', 'summary' => '每页开始条数'];
+        $this->docParams['limit'] = ['type' => 'int', 'summary' => '每页条目数'];
+        $this->docParams['total'] = ['type' => 'int', 'summary' => '总数量'];
+        $this->docParams['success'] = ['type' => 'bool', 'summary' => '是否成功'];
+        $this->docParams['createTime'] = ['type' => 'datetime', 'summary' => '创建时间'];
+        $this->docParams[getProEnv('authFiled')] = ['type' => 'string', 'summary' => '登录身份认证'];
     }
 
     /**
@@ -127,21 +133,21 @@ class api
      */
     private function listDir()
     {
-        if (!is_dir($this->interface_dir)) {
+        if (!is_dir($this->interfaceDir)) {
             $this->responseError('接口文件目录不正确！');
         }
 
-        $dh = opendir($this->interface_dir);
+        $dh = opendir($this->interfaceDir);
         if ($dh === false) {
             $this->responseError('无法读取接口文件目录！');
         }
 
         while (($file = readdir($dh)) !== false) {
-            $interfacePath = $this->interface_dir . DS . $file;
+            $interfacePath = $this->interfaceDir . DS . $file;
             if (substr($file, -3) === 'php' && is_file($interfacePath)) {
-                $module_name = substr($file, 0, -4);
+                $moduleName = substr($file, 0, -4);
                 include $interfacePath;
-                $this->api['api_list'][$module_name] = $this->subset_api;
+                $this->api['api_list'][$moduleName] = $this->subsetApi;
             }
         }
         closedir($dh);
@@ -253,7 +259,7 @@ class api
         foreach ($this->info as $key => $value) {
             $subset[$key] = $value;
         }
-        $this->subset_api['kind'][] = $subset;
+        $this->subsetApi['kind'][] = $subset;
     }
 
     /**
@@ -272,7 +278,7 @@ class api
                         $key = substr($key, 1);
                     }
 
-                    $parameter[$key] = $this->doc_params[$key];
+                    $parameter[$key] = $this->docParams[$key];
                     $parameter[$key]['is_must'] = $is_must ? 1 : 0;
                     $parameter[$key]['data'] = $this->addParameter($value);
                 } else {
@@ -281,7 +287,7 @@ class api
                         $value = substr($value, 1);
                     }
 
-                    $parameter[$value] = $this->doc_params[$value];
+                    $parameter[$value] = $this->docParams[$value];
                     $parameter[$value]['is_must'] = $is_must ? 1 : 0;
                 }
             }
@@ -291,7 +297,7 @@ class api
             if ($is_must === false) {
                 $params = substr($params, 1);
             }
-            $temp = $this->doc_params[$params];
+            $temp = $this->docParams[$params];
             $temp['is_must'] = $is_must;
             return $temp;
         }
@@ -312,7 +318,7 @@ class api
                     if ($must === 0) {
                         $key = substr($key, 1);
                     }
-                    $value = array_merge($value, $this->doc_params[$key], ['is_must' => $must]);
+                    $value = array_merge($value, $this->docParams[$key], ['is_must' => $must]);
                 }
             }
             return $fields;
@@ -321,8 +327,8 @@ class api
             if ($must === 0) {
                 $fields = substr($fields, 1);
             }
-            if (!empty($this->doc_params[$fields])) {
-                $temp = $this->doc_params[$fields];
+            if (!empty($this->docParams[$fields])) {
+                $temp = $this->docParams[$fields];
                 $temp['name'] = $fields;
                 $temp['is_must'] = $must;
                 return $temp;
@@ -367,10 +373,10 @@ class api
             $this->param = $_GET;
             $method = 'GET';
         }
-        if ($this->open_api_log) {
+        if ($this->openApiLog) {
             $this->interfaceLogService->update(
                 ['method' => $method, 'request' => jsonEncodeExtend($this->param)],
-                ['tbid' => $this->log_id]
+                ['tbid' => $this->logId]
             );
         }
     }
@@ -387,9 +393,6 @@ class api
     {
         if (empty($params)) {
             $params = $this->param;
-            if (is_array($parameter) && array_key_exists('token', $parameter)) {
-                $params['token'] = $_SERVER['HTTP_' . TOKEN_KEY] ?: null;
-            }
         }
         if (!empty($parameter) && is_array($params)) {
             if (empty($file)) {
@@ -398,7 +401,7 @@ class api
 
             foreach ($parameter as $key => $value) {
                 $rtk = $this->removeParamsTag($key);
-                if (!array_key_exists($key, $this->doc_params)) {
+                if (!array_key_exists($key, $this->docParams)) {
                     if ($this->debug) {
                         $this->responseError("参数「" . $key . "」未定义");
                     }
@@ -413,7 +416,7 @@ class api
                     }
                 }
 
-                $param = $this->doc_params[$key]['type'] == 'file' ? $file[$rtk] : $params[$rtk];
+                $param = $this->docParams[$key]['type'] == 'file' ? $file[$rtk] : $params[$rtk];
                 if ($value['is_must'] === 0 && is_null($param) && isset($value['default'])) {
                     $params[$rtk] = $value['default'];
                     continue;
@@ -502,16 +505,62 @@ class api
 
     /**
      * 判断是否为查看文档
+     * @throws Exception
      */
     private function checkDoc()
     {
         if ($_GET['doc'] == true) {
             $this->infoApiDoc();
         }
+        $this->checkRequestHeaders();
+    }
+
+    /**
+     * 验证请求header
+     * @return bool
+     */
+    private function checkRequestHeaders()
+    {
+        $headers = $this->headers;
+        if (empty($headers)) {
+            return true;
+        }
+
+        $checkAuthField = getProEnv('authFiled');
+        $realHeaders = [];
+        foreach ($headers as $hv) {
+            $isMust = $this->checkParamsMust($hv);
+            $hv = $this->removeParamMustTag($hv);
+            $realHeaders[$hv] = $isMust;
+        }
+
+        $HTTPHeaders = getRequestHeaders();
+        foreach ($realHeaders as $hName => $must) {
+            if ($must && !array_key_exists($hName, $HTTPHeaders)) {
+                $this->responseError("缺少请求头：{$hName}", self::CODE_LACK_PARAM);
+            }
+
+            if ($hName == $checkAuthField) {
+                $this->checkTokenAuthorize($HTTPHeaders[$hName]);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 验证token
+     * @param $token
+     * @return mixed
+     */
+    private function checkTokenAuthorize($token)
+    {
+        $jwt = $this->loadService('jwtAuthorize');
+        return $jwt->verifyToken($token);
     }
 
     /**
      * 判断是否为模拟数据并直接输出模拟数据
+     * @throws Exception
      */
     private function checkSimulate()
     {
@@ -534,13 +583,13 @@ class api
         switch ($param['type']) {
             case 'int':
             case 'integral':
-                $simulate = rand();
+                $simulate = random_int(0, 9999);
                 break;
             case 'string':
                 $simulate = generateRandomCode(rand(0, 10));
                 break;
             case 'bool':
-                $simulate = rand(0, 1) === 1;
+                $simulate = random_int(0, 1) === 1;
                 break;
             case 'array':
                 $simulate = [];
@@ -599,7 +648,7 @@ class api
      */
     private function listApiDoc()
     {
-        $show_api = getProEnv('system.show_api_doc');
+        $show_api = getProEnv('system.showApiDoc');
         $echo_api = [
             'show_api' => $show_api,
             'api_title' => PLATFORM,
@@ -625,19 +674,20 @@ class api
 
     /**
      * 输出单个api文档详情
+     * @throws Exception
      */
     private function infoApiDoc()
     {
-        $show_api = getProEnv('system.show_api_doc');
+        $show_api = getProEnv('system.showApiDoc');
         if ($show_api === false) {
             $this->responseOk(new stdClass(), 2);
         }
 
         $api_info = [
             'api_name' => $this->info['summary'],
-            'api_module' => $this->subset_api['name'],
-            'api_uri' => $this->module_name . '/' . str_replace('.', '/', $this->info['req']),
-            'api_url' => API_DOMAIN . 'api' . '/' . $this->module_name . '/' . str_replace('.', '/', $this->info['req']),
+            'api_module' => $this->subsetApi['name'],
+            'api_uri' => $this->moduleName . '/' . str_replace('.', '/', $this->info['req']),
+            'api_url' => API_DOMAIN . 'api' . '/' . $this->moduleName . '/' . str_replace('.', '/', $this->info['req']),
             'method' => $this->info['method'],
             'request_param' => [],
             'response_param' => [],
@@ -651,9 +701,14 @@ class api
         }
         if (!empty($this->info['fields'])) {
             $api_info['response_param'] = $this->listFields($this->info['fields']);
-            $api_info['json_string'] = json_encode($this->listJson($this->fields), JSON_PRETTY_PRINT);
+
+            $resp = [];
+            $resp['data'] = $this->listJson($this->fields);
+            $resp['msg'] = "";
+            $resp['code'] = 200;
+            $api_info['json_string'] = json_encode($resp, JSON_PRETTY_PRINT);
         }
-        $api_info['test_url'] = '{{host}}/' . $this->module_name . '/' . str_replace('.', '/', $this->info['req']) . $data_url;
+        $api_info['test_url'] = '{{host}}/' . $this->moduleName . '/' . str_replace('.', '/', $this->info['req']) . $data_url;
         $api_info['post_test'] = $data_url;
         $this->responseOk(jsonEncodeExtend($api_info), 2);
     }
@@ -662,15 +717,17 @@ class api
      * 输出json格式响应示例
      * @param $list
      * @return array
+     * @throws Exception
      */
     private function listJson($list)
     {
         $json_data = [];
         foreach ($list as $k => $v) {
             if (is_numeric($k)) {
+                $simulateVal = $this->generateSimulate($this->docParams[$v]);
                 $v = $this->removeParamsTag($v);
                 $v = $this->removeParamMustTag($v);
-                $json_data[$v] = '';
+                $json_data[$v] = $simulateVal;
                 unset($list[$k]);
             } else {
                 $k = $this->removeParamsTag($k);
@@ -811,16 +868,12 @@ class api
      */
     public function loadService($service_name)
     {
-        if (
-            array_key_exists($service_name, self::$module_instances)
-            && self::$module_instances[$service_name] instanceof $service_name
-        ) {
-            return self::$module_instances[$service_name];
+        if (!(self::$moduleInstances[$service_name] instanceof $service_name)) {
+            $this->includeFile(SERVICE_DIR . $service_name . ".class.php");
+            self::$moduleInstances[$service_name] = new $service_name($this);
         }
 
-        $this->includeFile(SERVICE_DIR . $service_name . ".class.php");
-        self::$module_instances[$service_name] = new $service_name($this);
-        return self::$module_instances[$service_name];
+        return self::$moduleInstances[$service_name];
     }
 
     /**
@@ -828,7 +881,7 @@ class api
      * @param object $e
      * @return void
      */
-    public function outputPdoException($e)
+    public function outputPDOException($e)
     {
         $message = $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine() . '<br>Stack trace:<br>';
         $trace = $e->getTrace();
@@ -838,7 +891,7 @@ class api
 
         $sqlerrorService = $this->loadService("interfaceSqlerrorLog");
         $sqlerrorService->add([
-            'api' => $this->module_name . '.' . $this->info['req'],
+            'api' => $this->moduleName . '.' . $this->info['req'],
             'err_content' => $message,
         ]);
         if ($this->debug) {
@@ -852,13 +905,13 @@ class api
      * @param $error
      * @param int $status
      */
-    public function responseError($error, $status = 1)
+    public function responseError($error, $status = self::CODE_ERROR)
     {
         if ($this->db->inTransaction()) {
             $this->db->rollBack();
         }
-        $this->data['error'] = $error;
-        $this->data['status'] = $status;
+        $this->data['msg'] = $error;
+        $this->data['code'] = $status;
         $this->responseOk();
     }
 
@@ -877,11 +930,11 @@ class api
                     $this->data['data'][$key] = $value;
                 }
             }
-            if (!isset($this->data['error'])) {
-                $this->data['error'] = '';
+            if (!isset($this->data['msg'])) {
+                $this->data['msg'] = '';
             }
-            if (!isset($this->data['status'])) {
-                $this->data['status'] = 1;
+            if (!isset($this->data['code'])) {
+                $this->data['code'] = self::CODE_OK;
             }
 
             $echo_response = empty($_GET['callback'])
@@ -891,8 +944,8 @@ class api
             $echo_response = $data;
         }
         echo $echo_response;
-        if ($this->open_api_log && $write_log) {
-            $this->interfaceLogService->update(['response' => $this->data], ['tbid' => $this->log_id]);
+        if ($this->openApiLog && $write_log) {
+            $this->interfaceLogService->update(['response' => $this->data], ['tbid' => $this->logId]);
         }
         exit;
     }

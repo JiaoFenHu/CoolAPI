@@ -1,25 +1,24 @@
 <?php
-$this->subset_api = array('name' => 'demo');
-if (isset($this->module)) {
-    $that = $this->module;
-    //配置公用参数
-    $this->doc_param['id'] = array('type' => 'int', 'summary' => 'id');
-    $this->doc_param['hashId'] = array('type' => 'string', 'summary' => 'hashId密文');
-    $this->doc_param['length'] = array('type' => 'int', 'summary' => '密文长度');
-    $this->doc_param['mode'] = array('type' => 'int', 'summary' => '类型', 'list' => [1 => '纯数字', 2 => '纯英文', 3 => '混合']);
-    $this->doc_param['pattern'] = array('type' => 'int', 'summary' => '选项', 'default' => 1);
+$this->subsetApi = array('name' => 'demo');
+if ($this->loadFieldDoc) {
+    $this->docParams['id'] = array('type' => 'int', 'summary' => 'id');
+    $this->docParams['hashId'] = array('type' => 'string', 'summary' => 'hashId密文');
+    $this->docParams['length'] = array('type' => 'int', 'summary' => '密文长度');
+    $this->docParams['mode'] = array('type' => 'int', 'summary' => '类型', 'list' => [1 => '纯数字', 2 => '纯英文', 3 => '混合']);
+    $this->docParams['pattern'] = array('type' => 'int', 'summary' => '选项', 'default' => 1);
 }
 
 $this->info = array('req' => 'test');
 $this->info['summary'] = '测试';
 if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
-    $this->headers = array('token');
-    $this->parameter = array();
-    $this->fields = array();
+    $this->headers = array('@token');
+    $this->parameter = array('hashId');
+    $this->fields = array('records' => ['mode', 'hashId', 'success', 'createTime'], 'total');
     $param = $this->apiInit();
     //具体执行代码
     $jwt = $this->loadService("jwtAuthorize");
+    $demo = $this->loadService("demo");
 
     prints(getRequestHeaders(), false);
 
@@ -32,9 +31,9 @@ if ($this->checkThisApi()) {
     //
     // $jwt->verifyToken('1'. $token);
 
-    $that->test();
+    $demo->test();
 
     $this->responseOk($data);
 }
 //添加所有接口参数
-$this->addsubset();
+$this->addSubset();

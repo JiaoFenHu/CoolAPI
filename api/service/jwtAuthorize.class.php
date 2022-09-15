@@ -10,8 +10,10 @@ use Lcobucci\JWT\Token;
 
 class jwtAuthorize extends base
 {
-    private $signer;
-    private $key;
+    private Sha256 $signer;
+    private InMemory $key;
+
+    private string $userFiled = 'memberId';
 
     function __construct(api $api)
     {
@@ -34,20 +36,21 @@ class jwtAuthorize extends base
 
     /**
      * 获取token
+     * @param int $userId
      * @param array $claims
-     * @param int $user_id
      * @return string
      */
-    public function createToken(array $claims, int $user_id): string
+    public function createToken(int $userId, array $claims = []): string
     {
         $configure = $this->getConfigure();
-        $this->api->member_id = $user_id;
+        $this->api->memberId = $userId;
+        $claims[$this->userFiled] = $userId;
 
         $now = new DateTimeImmutable();
         $token = $configure->builder()
             ->issuedBy(API_DOMAIN_REAL)
             ->permittedFor(API_DOMAIN_REAL)
-            ->identifiedBy(sha1((string)$user_id))
+            ->identifiedBy(sha1((string)$userId))
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify("+1 day"));
@@ -82,9 +85,6 @@ class jwtAuthorize extends base
             $configure = $this->getConfigure();
             $token = $configure->parser()->parse($token);
 
-            $user_id = $token->claims()->get('member_id');
-            $this->api->member_id = $user_id * 1;
-
             // 以下验证token各项值是否符合签发的值代码
             $this->checkTokenSignedWith($token);
             $this->checkTokenTimeValid(
@@ -95,8 +95,11 @@ class jwtAuthorize extends base
             $this->checkTokenClaims($token->claims()->get('aud'), 'aud');
             $this->checkTokenClaims($token->claims()->get('jti'), 'jti');
 
+            $userId = $token->claims()->get($this->userFiled);
+            $this->api->memberId = $userId * 1;
+
         } catch (ConstraintViolation $e) {
-            $this->api->responseError($e->getMessage());
+            $this->api->responseError($e->getMessage(), $this->api::CODE_LOGIN_VALID);
         } catch (CannotDecodeContent $e) {
             $this->api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
         }
@@ -123,7 +126,7 @@ class jwtAuthorize extends base
                 }
                 break;
             case 'jti':
-                if ($value !== sha1((string)$this->api->member_id)) {
+                if ($value !== sha1((string)$this->api->memberId)) {
                     throw new ConstraintViolation("身份验证失败，身份编号异常！");
                 }
                 break;

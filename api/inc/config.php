@@ -5,7 +5,7 @@ require_once(INC_DIR . 'db.class.php');
 require_once(INC_DIR . 'function.inc.php');
 require_once(INC_DIR . 'defines.inc.php');
 
-if (getProEnv('system.show_php_error')) {
+if (getProEnv('system.showPHPError')) {
     ini_set('display_errors', 1);
     error_reporting(E_ALL ^ E_NOTICE);
 } else {

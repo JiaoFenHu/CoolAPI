@@ -3,27 +3,11 @@
 /**
  * 对变量进行 JSON 编码
  * @param $value
- * @param false $isEncodeChinese
- * @param false $isEncodeUrl
  * @return false|string
  */
-function jsonEncodeExtend($value, bool $isEncodeChinese = false, bool $isEncodeUrl = false)
+function jsonEncodeExtend($value)
 {
-    switch (true) {
-        case ($isEncodeChinese && $isEncodeUrl):
-            $encode = json_encode($value, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-            break;
-        case $isEncodeChinese:
-            $encode = json_encode($value, JSON_UNESCAPED_UNICODE);
-            break;
-        case $isEncodeUrl:
-            $encode = json_encode($value, JSON_UNESCAPED_SLASHES);
-            break;
-        default:
-            $encode = json_encode($value);
-            break;
-    }
-    return $encode;
+    return json_encode($value, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
 }
 
 /**

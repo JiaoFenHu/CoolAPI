@@ -10,6 +10,6 @@ class demo extends base
     {
         $param = $this->initParam();
         prints($param, true, false);
-        prints($this->api->member_id);
+        prints($this->api->memberId);
     }
 }
