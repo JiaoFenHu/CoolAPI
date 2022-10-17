@@ -6,9 +6,7 @@ declare(strict_types=1);
  * @changeDate 2022-02-19
  * @desc 入口文件
  */
-header('Access-Control-Allow-Origin:*');
-require('globals.php');
-require(INC_DIR . 'config.php');
+require('../globals.php');
 require(COMPOSER_DIR . 'autoload.php');
 
 $api = new api("controller");
@@ -40,12 +38,12 @@ class api
     public $req;
     #模块名
     public $moduleName;
+    #站点
+    public string $station;
     #模块类
     public bool $loadFieldDoc = false;
     #日志id
     public string $logId;
-    #db
-    public DB $db;
     #接口目录
     private string $interfaceDir;
     #debug
@@ -53,18 +51,18 @@ class api
     #接口访问日志开关
     private bool $openApiLog;
     #接口日志服务
-    private interfaceLog $interfaceLogService;
+    private $interfaceLogService;
     #实例化service组
     private static array $moduleInstances = [];
     #用户ID
     public ?int $memberId;
-    #token
+    #请求头
     public array $headers = [];
+    #权限组
+    public array $authorization = [];
 
     public function __construct($app)
     {
-        global $db;
-        $this->db = $db;
         $this->debug = getProEnv('system.openApiDebug');
         $this->interfaceDir = API_DIR . $app;
         $this->openApiLog = getProEnv('system.openRequestLog');
@@ -76,34 +74,45 @@ class api
 
         // 文档
         if ($_REQUEST['req'] == 'doc') {
-            $this->api = ['api_name' => PLATFORM . '接口文档'];
-            $this->listDir();
-            $this->listApiDoc();
+            $dh = opendir($this->interfaceDir);
+            if ($dh === false) {
+                $this->responseError('无法读取接口文件目录！');
+            }
+
+            try {
+                $apiStations = \repository\basic\Configure::app('apiStationDirs');
+                $infoDirList = [];
+                while (($file = readdir($dh)) !== false) {
+                    if ($file !== '.' && $file !== '..') {
+                        $infoDirList[] = [
+                            'name' => $apiStations[$file] ?? "站点「{$file}」",
+                            'client' => $file
+                        ];
+                    }
+                }
+                $this->responseOk(jsonEncodeExtend($infoDirList), 2, false);
+            } catch (Throwable $e) {
+                $this->responseError($e->getMessage());
+            }
+
         }
 
         // 接口
         if (!empty($_REQUEST['req']) && $_REQUEST['req'] !== 'doc') {
-
             // 全局捕获异常
             try {
-                include(INC_DIR . 'interfaceORM.php');
-                include(INC_DIR . 'orm.class.php');
-                include(SERVICE_DIR . 'base.class.php');
-                if ($this->openApiLog) {
-                    $this->interfaceLogService = $this->loadService("interfaceLog");
-                    $this->logId = $this->interfaceLogService->add([
-                        'ip' => getClientIp(),
-                        'url' => $_SERVER['SCRIPT_NAME'],
-                        'api' => $_REQUEST['req'],
-                    ]);
-                }
-
                 $this->req = explode('.', $_REQUEST['req']);
+                $this->station = array_shift($this->req);
+                if (empty($this->req)) {
+                    // $this->api = ['api_name' => PLATFORM . '接口文档'];
+                    $this->listApiDir($this->station);
+                    $this->listApiDoc();
+                }
                 $this->moduleName = array_shift($this->req);
                 $this->req = implode('.', $this->req);
                 $this->loadFieldDoc = true;
                 $this->initParamDoc();
-                $this->includeFile($this->interfaceDir . "/" . $this->moduleName . '.php');
+                $this->includeFile("{$this->interfaceDir}/{$this->station}/{$this->moduleName}.php");
             } catch (Throwable $e) {
                 $this->responseError($e->getMessage());
             }
@@ -111,7 +120,7 @@ class api
                 $this->responseError('请确认接口类型' . $this->moduleName . '-' . $this->req);
             }
         }
-        $this->responseError('No Permission To Access Interface Documents!');
+        exit('No Permission To Access Interface Documents!');
     }
 
     /**
@@ -130,20 +139,22 @@ class api
 
     /**
      * 遍历加载接口文件夹，加载接口
+     * @param string $station
      */
-    private function listDir()
+    private function listApiDir(string $station)
     {
-        if (!is_dir($this->interfaceDir)) {
+        $interfaceDir = $this->interfaceDir . DS . $station;
+        if (!is_dir($interfaceDir)) {
             $this->responseError('接口文件目录不正确！');
         }
 
-        $dh = opendir($this->interfaceDir);
+        $dh = opendir($interfaceDir);
         if ($dh === false) {
             $this->responseError('无法读取接口文件目录！');
         }
 
         while (($file = readdir($dh)) !== false) {
-            $interfacePath = $this->interfaceDir . DS . $file;
+            $interfacePath = $interfaceDir . DS . $file;
             if (substr($file, -3) === 'php' && is_file($interfacePath)) {
                 $moduleName = substr($file, 0, -4);
                 include $interfacePath;
@@ -220,6 +231,7 @@ class api
     /**
      * 接口预处理方法
      * @return array
+     * @throws Exception
      */
     private function apiInit()
     {
@@ -227,6 +239,8 @@ class api
         $this->addParam();
         //是否为查看文档模式
         $this->checkDoc();
+        //验证请求头
+        $this->checkRequestHeaders();
         //获取传输数据
         $this->getRequestParams();
         //检测参数是否完整
@@ -279,7 +293,7 @@ class api
                     }
 
                     $parameter[$key] = $this->docParams[$key];
-                    $parameter[$key]['is_must'] = $is_must ? 1 : 0;
+                    $parameter[$key]['is_must'] = $is_must;
                     $parameter[$key]['data'] = $this->addParameter($value);
                 } else {
                     $is_must = $this->checkParamsMust($value);
@@ -288,7 +302,7 @@ class api
                     }
 
                     $parameter[$value] = $this->docParams[$value];
-                    $parameter[$value]['is_must'] = $is_must ? 1 : 0;
+                    $parameter[$value]['is_must'] = $is_must;
                 }
             }
             return $parameter;
@@ -314,7 +328,7 @@ class api
             foreach ($fields as $key => &$value) {
                 $value = $this->addFields($value);
                 if (!is_numeric($key)) {
-                    $must = $this->checkParamsMust($key) ? 1 : 0;
+                    $must = $this->checkParamsMust($key);
                     if ($must === 0) {
                         $key = substr($key, 1);
                     }
@@ -323,7 +337,7 @@ class api
             }
             return $fields;
         } else {
-            $must = $this->checkParamsMust($fields) ? 1 : 0;
+            $must = $this->checkParamsMust($fields);
             if ($must === 0) {
                 $fields = substr($fields, 1);
             }
@@ -373,7 +387,7 @@ class api
             $this->param = $_GET;
             $method = 'GET';
         }
-        if ($this->openApiLog) {
+        if ($this->openApiLog && $this->interfaceLogService instanceof \service\InterfaceLog) {
             $this->interfaceLogService->update(
                 ['method' => $method, 'request' => jsonEncodeExtend($this->param)],
                 ['tbid' => $this->logId]
@@ -512,7 +526,16 @@ class api
         if ($_GET['doc'] == true) {
             $this->infoApiDoc();
         }
-        $this->checkRequestHeaders();
+
+        //写入请求日志
+        if ($this->openApiLog) {
+            $this->interfaceLogService = $this->loadService("InterfaceLog");
+            $this->logId = $this->interfaceLogService->add([
+                'ip' => getClientIp(),
+                'url' => $_SERVER['SCRIPT_NAME'],
+                'api' => $_REQUEST['req'],
+            ]);
+        }
     }
 
     /**
@@ -521,7 +544,7 @@ class api
      */
     private function checkRequestHeaders()
     {
-        $headers = $this->headers;
+        $headers = array_unique($this->headers);
         if (empty($headers)) {
             return true;
         }
@@ -530,7 +553,7 @@ class api
         $realHeaders = [];
         foreach ($headers as $hv) {
             $isMust = $this->checkParamsMust($hv);
-            $hv = $this->removeParamMustTag($hv);
+            $hv = $this->removeParamsTag($this->removeParamMustTag($hv));
             $realHeaders[$hv] = $isMust;
         }
 
@@ -554,7 +577,7 @@ class api
      */
     private function checkTokenAuthorize($token)
     {
-        $jwt = $this->loadService('jwtAuthorize');
+        $jwt = $this->loadService('JwtAuthorize');
         return $jwt->verifyToken($token);
     }
 
@@ -564,12 +587,8 @@ class api
      */
     private function checkSimulate()
     {
-        if ($this->param['simulate'] == 1) {
-            foreach ($this->info['fields'] as $key => $value) {
-                $this->data[$key] = $this->generateSimulate($value);
-            }
-            $this->responseOk();
-        }
+        $simulateData = $this->listJson($this->fields);
+        $this->responseOk($simulateData);
     }
 
     /**
@@ -644,6 +663,36 @@ class api
     }
 
     /**
+     * 获取请求头字段解释
+     * @return array
+     */
+    private function getHeadersDoc() : array
+    {
+        $this->docParams;
+        $realHeaders = [];
+        foreach ($this->headers as $hv) {
+            $isMust = $this->checkParamsMust($hv);
+            $hv = $this->removeParamMustTag($hv);
+
+            if (!array_key_exists($hv, $this->docParams)) {
+                if (PROJECT_ENV !== 'production') {
+                    $this->responseError("请求头「{$hv}」字段说明未定义！");
+                }
+                $this->docParams[$hv]['summary'] = "";
+                $this->docParams[$hv]['type'] = "string";
+                $this->docParams[$hv]['list'] = [];
+            }
+
+            $tmp = $this->docParams[$hv];
+            $tmp['is_must'] = $isMust;
+            $tmp['name'] = $this->removeParamsTag($hv);
+            $realHeaders[] = $tmp;
+            unset($tmp);
+        }
+        return $realHeaders;
+    }
+
+    /**
      * 输出整个api文档
      */
     private function listApiDoc()
@@ -680,20 +729,25 @@ class api
     {
         $show_api = getProEnv('system.showApiDoc');
         if ($show_api === false) {
-            $this->responseOk(new stdClass(), 2);
+            $this->responseOk(new stdClass(), 2, false);
         }
 
         $api_info = [
             'api_name' => $this->info['summary'],
             'api_module' => $this->subsetApi['name'],
             'api_uri' => $this->moduleName . '/' . str_replace('.', '/', $this->info['req']),
-            'api_url' => API_DOMAIN . 'api' . '/' . $this->moduleName . '/' . str_replace('.', '/', $this->info['req']),
+            'api_url' => API_DOMAIN . 'api/' . $this->station . '/' . $this->moduleName . '/' . str_replace('.', '/', $this->info['req']),
             'method' => $this->info['method'],
+            'authorizations' => [],
+            'request_headers' => $this->getHeadersDoc(),
             'request_param' => [],
             'response_param' => [],
             'json_string' => '{}'
         ];
         $data_url = '';
+        if (!empty($this->authorization)) {
+            $api_info['authorizations'] = $this->getAuthorizations();
+        }
         if (!empty($this->info['parameter'])) {
             $api_info['request_param'] = $this->listParameters($this->info['parameter']);
             $data_url .= $this->info['method'] == 'GET' ? '?' : '';
@@ -709,8 +763,34 @@ class api
             $api_info['json_string'] = json_encode($resp, JSON_PRETTY_PRINT);
         }
         $api_info['test_url'] = '{{host}}/' . $this->moduleName . '/' . str_replace('.', '/', $this->info['req']) . $data_url;
-        $api_info['post_test'] = $data_url;
-        $this->responseOk(jsonEncodeExtend($api_info), 2);
+        $api_info['post_test'] = strtoupper($this->info['method']) == 'GET' ? "" : $data_url;
+        $this->responseOk(jsonEncodeExtend($api_info), 2, false);
+    }
+
+    /**
+     * 获取接口权限
+     * @return array
+     * @throws \repository\exception\CoolException
+     */
+    private function getAuthorizations()
+    {
+        $authorizations = [];
+        $authDoc = \repository\basic\Configure::app('authorizationDoc', []);
+        foreach ($this->authorization as $key => $val) {
+            if (is_numeric($key)) {
+                $authName = $authDoc[$val] ?? "unknow";
+                $authorizations[] = [
+                    'authorization' => "{$this->moduleName}.{$val}",
+                    'name' => "{$this->subsetApi['name']}[{$authName}]"
+                ];
+            }else {
+                $authorizations[] = [
+                    'authorization' => "{$this->moduleName}.{$key}",
+                    'name' => "{$this->subsetApi['name']}[{$val}]"
+                ];
+            }
+        }
+        return $authorizations;
     }
 
     /**
@@ -805,7 +885,7 @@ class api
                     $dg['summary'] = $v['summary'];
                     $dg['type'] = $v['type'];
                     $dg['name'] = $this->removeParamsTag($k);
-                    $dg['is_must'] = $this->checkParamsMust($k) ? 1 : 0;
+                    $dg['is_must'] = $this->checkParamsMust($k);
                     $v = $dg;
                 }
 
@@ -869,7 +949,7 @@ class api
     public function loadService($service_name)
     {
         if (!(self::$moduleInstances[$service_name] instanceof $service_name)) {
-            $this->includeFile(SERVICE_DIR . $service_name . ".class.php");
+            $this->includeFile(SERVICE_DIR . $service_name . ".php");
             self::$moduleInstances[$service_name] = new $service_name($this);
         }
 
@@ -889,11 +969,6 @@ class api
             $message .= '#' . $key . ' ' . $value['file'] . '(' . $value['line'] . '): ' . $value['class'] . $value['type'] . $value['function'] . '()<br>';
         }
 
-        $sqlerrorService = $this->loadService("interfaceSqlerrorLog");
-        $sqlerrorService->add([
-            'api' => $this->moduleName . '.' . $this->info['req'],
-            'err_content' => $message,
-        ]);
         if ($this->debug) {
             $this->responseError($message);
         }
@@ -907,9 +982,6 @@ class api
      */
     public function responseError($error, $status = self::CODE_ERROR)
     {
-        if ($this->db->inTransaction()) {
-            $this->db->rollBack();
-        }
         $this->data['msg'] = $error;
         $this->data['code'] = $status;
         $this->responseOk();
@@ -944,7 +1016,7 @@ class api
             $echo_response = $data;
         }
         echo $echo_response;
-        if ($this->openApiLog && $write_log) {
+        if ($this->openApiLog && $write_log && ($this->interfaceLogService instanceof \service\InterfaceLog)) {
             $this->interfaceLogService->update(['response' => $this->data], ['tbid' => $this->logId]);
         }
         exit;
