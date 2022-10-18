@@ -14,9 +14,10 @@ function jsonEncodeExtend($value)
 /**
  * 读取配置文件信息
  * @param string $conf_name
+ * @param null $default
  * @return mixed
  */
-function getProEnv(string $conf_name)
+function getProEnv(string $conf_name, $default = null)
 {
     static $env_configs = [];
     if (empty($env_configs)) {
@@ -27,14 +28,26 @@ function getProEnv(string $conf_name)
     $conf_names = explode('.', $conf_name);
     switch (count($conf_names)) {
         case 1:
+            if (!array_key_exists($conf_names[0], $env_configs)) {
+                return $default;
+            }
             $each_configs = $env_configs[$conf_names[0]];
             break;
         case 2:
+            if (
+                !array_key_exists($conf_names[0], $env_configs)
+                || !array_key_exists($conf_names[1], $env_configs[$conf_names[0]])
+            ) {
+                return $default;
+            }
             $each_configs = $env_configs[$conf_names[0]][$conf_names[1]];
             break;
         default:
             $each_configs = $env_configs;
             foreach ($conf_names as $name) {
+                if (!array_key_exists($name, $each_configs)) {
+                    return $default;
+                }
                 $each_configs = $each_configs[$name];
             }
             break;

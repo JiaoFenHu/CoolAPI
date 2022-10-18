@@ -1,5 +1,4 @@
 <?php
-declare(strict_types = 1);
 /**
  * 基于Medoo分离出MySQL的数据库操作类
  * @version 1.0
@@ -9,9 +8,9 @@ declare(strict_types = 1);
  */
 namespace repository\db;
 
-use PDO;
-use PDOException;
-use PDOStatement;
+use \PDO;
+use \PDOException;
+use \PDOStatement;
 
 class CoolDB extends PDO
 {
