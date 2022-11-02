@@ -6,7 +6,7 @@ declare(strict_types=1);
  * @changeDate 2022-02-19
  * @desc 入口文件
  */
-require('../globals.php');
+require(dirname(__DIR__) . '/globals.php');
 require(COMPOSER_DIR . 'autoload.php');
 
 $api = new api("controller");
@@ -60,11 +60,14 @@ class api
     public array $headers = [];
     #权限组
     public array $authorization = [];
+    #签名认证字段
+    public string $authField;
 
     public function __construct($app)
     {
-        $this->debug = getProEnv('system.openApiDebug');
-        $this->openApiLog = getProEnv('system.openRequestLog');
+        $this->debug = getProEnv('system.openApiDebug', false) ? true : false;
+        $this->openApiLog = getProEnv('system.openRequestLog', false) ? true : false;
+        $this->authField = getProEnv('system.authFiled', 'token');
         $this->interfaceDir = API_DIR . $app;
 
         // 全局捕获异常
@@ -75,7 +78,7 @@ class api
             }
 
             // 文档
-            if ($_REQUEST['req'] == 'doc') {
+            if ($_REQUEST['req'] == "" && $_REQUEST['doc'] == 1) {
                 $apiStations = \repository\basic\Configure::app('apiStationDirs');
                 $infoDirList = [];
                 $dh = opendir($this->interfaceDir);
@@ -107,7 +110,9 @@ class api
                 $this->includeFile("{$this->interfaceDir}/{$this->station}/{$this->moduleName}.php");
                 $this->responseOk("Interface Does Not Respond To Data!", 2);
             }
-            $this->responseOk("No Permission To Access Interface Documents!", 2);
+            $this->responseOk("No Permission To Access Interface Documents!", 2, false);
+        } catch (TypeError $te) {
+            $this->responseError($te->getMessage());
         } catch (Throwable $e) {
             if ($this->debug) {
                 $detailError = $this->getExceptionDetail($e);
@@ -120,22 +125,22 @@ class api
     /**
      * 初始化常用参数
      */
-    private function initParamDoc()
+    private function initParamDoc(): void
     {
-        $this->docParams['records'] = ['type' => 'array', 'summary' => '列表数据'];
+        $this->docParams['list'] = ['type' => 'array[object]', 'summary' => '列表数据'];
         $this->docParams['from'] = ['type' => 'int', 'summary' => '每页开始条数'];
         $this->docParams['limit'] = ['type' => 'int', 'summary' => '每页条目数'];
         $this->docParams['total'] = ['type' => 'int', 'summary' => '总数量'];
         $this->docParams['success'] = ['type' => 'bool', 'summary' => '是否成功'];
         $this->docParams['createTime'] = ['type' => 'datetime', 'summary' => '创建时间'];
-        $this->docParams[getProEnv('system.authFiled')] = ['type' => 'string', 'summary' => '登录身份认证'];
+        $this->docParams[$this->authField] = ['type' => 'string', 'summary' => '登录身份认证'];
     }
 
     /**
      * 遍历加载接口文件夹，加载接口
      * @param string $station
      */
-    private function listApiDir(string $station)
+    private function listApiDir(string $station): void
     {
         $interfaceDir = $this->interfaceDir . DS . $station;
         if (!is_dir($interfaceDir)) {
@@ -160,9 +165,9 @@ class api
 
     /**
      * 加载单个文件
-     * @param $file
+     * @param string $file
      */
-    private function includeFile($file)
+    private function includeFile(string $file): void
     {
         if (!file_exists($file)) {
             if ($this->debug) {
@@ -177,21 +182,28 @@ class api
 
     /**
      * 校验输出数据是否完整
-     * @param $fields
-     * @param $data
+     * @param array $fields
+     * @param array $data
      */
-    private function checkResponseDataFields($fields, $data)
+    private function checkResponseDataFields(array $fields, array $data): void
     {
         foreach ($fields as $key => $value) {
             if (is_array($value)) {
                 $key = $this->checkFields($data, $key);
                 if (!empty($data[$key])) {
                     if (!is_array($data[$key])) {
-                        $this->responseError('响应参数:' . $key . '格式不正确');
+                        $this->responseError("响应参数「{$key}」数据类型异常！");
                     }
 
-                    foreach ($data[$key] as $field) {
-                        $this->checkResponseDataFields($value, $field);
+                    if ($this->docParams[$key]['type'] == 'array') {
+                        foreach ($data[$key] as $objField => $field) {
+                            if (!is_array($field)) {
+                                $this->responseError("响应参数「{$key}」数据类型异常！");
+                            }
+                            $this->checkResponseDataFields($value, $field);
+                        }
+                    }else {
+                        $this->checkResponseDataFields($value, $data[$key]);
                     }
                 }
             } else {
@@ -206,25 +218,89 @@ class api
      * @param string $field
      * @return string
      */
-    private function checkFields($data, $field)
+    private function checkFields(array $data, string $field): string
     {
+        $origField = $field;
         $field = $this->removeParamsTag($field);
         $must = $this->checkParamsMust($field);
         if ($must === false) {
             $field = substr($field, 1);
+            $origField = substr($origField, 1);
         }
+
         if ((!is_array($data) || !array_key_exists($field, $data)) && $must) {
-            if ($this->debug == 1) {
-                $this->responseError('响应参数:' . $field . '缺失!');
+            $this->responseError("响应参数「{$field}」缺失!");
+        }
+
+        if (array_key_exists($field, $data)) {
+            $dataType = $this->docParams[$origField]['type'];
+            switch ($dataType) {
+                case 'string':
+                    if (!is_string($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    break;
+                case 'bool':
+                    if (!is_bool($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    break;
+                case 'int':
+                case 'integer':
+                    if (!is_numeric($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    break;
+                case 'array[object]':
+                    if (!is_array($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    if (count($data[$field]) !== 0) {
+                        foreach ($data[$field] as $objK => $objV) {
+                            if (!is_int($objK) || !is_array($objV)) {
+                                $this->responseError("响应参数:「{$field}」数据类型异常!");
+                            }
+                        }
+                    }
+                    break;
+                case 'array[int]':
+                    if (!is_array($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    if (count($data[$field]) !== 0) {
+                        foreach ($data[$field] as $intK => $intV) {
+                            if (!is_int($intK) || !is_int($intV)) {
+                                $this->responseError("响应参数:「{$field}」数据类型异常!");
+                            }
+                        }
+                    }
+                    break;
+                case 'array[string]':
+                    if (!is_array($data[$field])) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    if (count($data[$field]) !== 0) {
+                        foreach ($data[$field] as $strK => $strV) {
+                            if (!is_int($strK) || !is_string($strV)) {
+                                $this->responseError("响应参数:「{$field}」数据类型异常!");
+                            }
+                        }
+                    }
+                    break;
+                case 'date':
+                case 'datetime':
+                    if (strtotime($data[$field]) === false) {
+                        $this->responseError("响应参数:「{$field}」数据类型异常!");
+                    }
+                    break;
             }
-            $this->responseError('响应参数缺失!');
         }
         return $field;
     }
 
     /**
      * 接口预处理方法
-     * @return array
+     * @return mixed
      * @throws Exception
      */
     private function apiInit()
@@ -247,7 +323,7 @@ class api
     /**
      * 添加接口文档参数
      */
-    private function addParam()
+    private function addParam(): void
     {
         if (!empty($this->parameter)) {
             $this->info['parameter'] = $this->addParameter($this->parameter);
@@ -261,7 +337,7 @@ class api
      * 添加接口相关信息
      * 不添加则无法输出单个api
      */
-    private function addSubset()
+    private function addSubset(): void
     {
         $subset = [];
         foreach ($this->info as $key => $value) {
@@ -273,9 +349,9 @@ class api
     /**
      * 添加请求参数和是否必填
      * @param $params
-     * @return array|mixed
+     * @return array
      */
-    private function addParameter($params)
+    private function addParameter($params): array
     {
         if (is_array($params)) {
             $parameter = [];
@@ -316,7 +392,7 @@ class api
      * @param $fields
      * @return array|mixed
      */
-    private function addFields($fields)
+    private function addFields($fields): array
     {
         if (is_array($fields)) {
             foreach ($fields as $key => &$value) {
@@ -335,21 +411,21 @@ class api
             if ($must === 0) {
                 $fields = substr($fields, 1);
             }
-            if (!empty($this->docParams[$fields])) {
-                $temp = $this->docParams[$fields];
-                $temp['name'] = $fields;
-                $temp['is_must'] = $must;
-                return $temp;
-            } else {
+            if (empty($this->docParams[$fields])) {
                 $this->responseError("配置的输出参数" . $fields . "没有定义");
             }
+
+            $temp = $this->docParams[$fields];
+            $temp['name'] = $fields;
+            $temp['is_must'] = $must;
+            return $temp;
         }
     }
 
     /**
      * 根据method获得param
      */
-    private function getRequestParams()
+    private function getRequestParams(): void
     {
         if ($this->info['method'] == 'POST') {
             $input = file_get_contents('php://input');
@@ -410,10 +486,7 @@ class api
             foreach ($parameter as $key => $value) {
                 $rtk = $this->removeParamsTag($key);
                 if (!array_key_exists($key, $this->docParams)) {
-                    if ($this->debug) {
-                        $this->responseError("参数「" . $key . "」未定义！");
-                    }
-                    $this->responseError('参数未定义!');
+                    $this->responseError("参数「{$key}」未定义！");
                 }
 
                 if (is_array($value['data'])) {
@@ -459,7 +532,8 @@ class api
                             $this->responseError('参数数据格式异常!');
                         }
                         break;
-                    case 'array':
+                    case 'array[int]':
+                    case 'array[string]':
                         if (!is_array($param)) {
                             if ($this->debug) {
                                 $this->responseError("参数 " . $rtk . " 类型不正确，请传入数组值。");
@@ -468,7 +542,7 @@ class api
                         }
                         break;
                     case 'int':
-                    case 'integral':
+                    case 'integer':
                         if (!is_numeric($param)) {
                             if ($this->debug) {
                                 $this->responseError("参数 " . $rtk . " 类型不正确，请传入数字值。");
@@ -506,7 +580,7 @@ class api
      * 判断是否为当前接口
      * @return bool
      */
-    private function checkThisApi()
+    private function checkThisApi(): bool
     {
         return $this->req == $this->info['req'];
     }
@@ -515,7 +589,7 @@ class api
      * 判断是否为查看文档
      * @throws Exception
      */
-    private function checkDoc()
+    private function checkDoc(): void
     {
         if (isset($_GET['doc']) && $_GET['doc'] == true) {
             $this->infoApiDoc();
@@ -536,14 +610,13 @@ class api
      * 验证请求header
      * @return bool
      */
-    private function checkRequestHeaders()
+    private function checkRequestHeaders(): bool
     {
         $headers = array_unique($this->headers);
         if (empty($headers)) {
             return true;
         }
 
-        $checkAuthField = getProEnv('authFiled');
         $realHeaders = [];
         foreach ($headers as $hv) {
             $isMust = $this->checkParamsMust($hv);
@@ -557,7 +630,7 @@ class api
                 $this->responseError("缺少请求头：{$hName}", self::CODE_LACK_PARAM);
             }
 
-            if ($hName == $checkAuthField) {
+            if ($hName == $this->authField && array_key_exists($hName, $HTTPHeaders)) {
                 $this->checkTokenAuthorize($HTTPHeaders[$hName]);
             }
         }
@@ -579,7 +652,7 @@ class api
      * 判断是否为模拟数据并直接输出模拟数据
      * @throws Exception
      */
-    private function checkSimulate()
+    private function checkSimulate(): void
     {
 
         if (isset($_GET['coolSimulate'])) {
@@ -598,7 +671,7 @@ class api
     {
         switch ($param['type']) {
             case 'int':
-            case 'integral':
+            case 'integer':
                 $simulate = random_int(0, 9999);
                 break;
             case 'string':
@@ -628,7 +701,7 @@ class api
      * @param $k
      * @return false|string
      */
-    private function removeParamsTag($k)
+    private function removeParamsTag($k): string
     {
         if (stripos($k, '#')) {
             $k = substr($k, 0, stripos($k, '#'));
@@ -641,7 +714,7 @@ class api
      * @param $k
      * @return bool
      */
-    private function checkParamsMust($k)
+    private function checkParamsMust($k): bool
     {
         return substr($k, 0, 1) !== '@';
     }
@@ -651,7 +724,7 @@ class api
      * @param $k
      * @return false|string
      */
-    private function removeParamMustTag($k)
+    private function removeParamMustTag($k): string
     {
         if ($this->checkParamsMust($k) === false) {
             $k = substr($k, 1);
@@ -663,7 +736,7 @@ class api
      * 获取请求头字段解释
      * @return array
      */
-    private function getHeadersDoc() : array
+    private function getHeadersDoc(): array
     {
         $this->docParams;
         $realHeaders = [];
@@ -692,7 +765,7 @@ class api
     /**
      * 输出整个api文档
      */
-    private function listApiDoc()
+    private function listApiDoc(): void
     {
         $show_api = getProEnv('system.showApiDoc');
         $echo_api = [
@@ -722,7 +795,7 @@ class api
      * 输出单个api文档详情
      * @throws Exception
      */
-    private function infoApiDoc()
+    private function infoApiDoc(): void
     {
         $show_api = getProEnv('system.showApiDoc');
         if ($show_api === false) {
@@ -769,7 +842,7 @@ class api
      * @return array
      * @throws \repository\exception\CoolException
      */
-    private function getAuthorizations()
+    private function getAuthorizations(): array
     {
         $authorizations = [];
         $authDoc = \repository\basic\Configure::app('authorizationDoc', []);
@@ -780,12 +853,12 @@ class api
                     'authorization' => "{$this->moduleName}.{$val}",
                     'name' => "{$this->subsetApi['name']}[{$authName}]"
                 ];
-            }else {
-                $authorizations[] = [
-                    'authorization' => "{$this->moduleName}.{$key}",
-                    'name' => "{$this->subsetApi['name']}[{$val}]"
-                ];
+                continue;
             }
+            $authorizations[] = [
+                'authorization' => "{$this->moduleName}.{$key}",
+                'name' => "{$this->subsetApi['name']}[{$val}]"
+            ];
         }
         return $authorizations;
     }
@@ -796,7 +869,7 @@ class api
      * @return array
      * @throws Exception
      */
-    private function listJson($list)
+    private function listJson($list): array
     {
         $json_data = [];
         foreach ($list as $k => $v) {
@@ -868,7 +941,7 @@ class api
      * @return array
      * @author hzl
      */
-    private function listFields($fields)
+    private function listFields($fields): array
     {
         $fields_param = [];
         foreach ($fields as $k => $v) {
@@ -909,7 +982,7 @@ class api
      * @return array
      * @author hzl
      */
-    private function listParameters($parameters)
+    private function listParameters($parameters): array
     {
         $format_parameters = [];
         foreach ($parameters as $k => $v) {
@@ -957,12 +1030,15 @@ class api
      * @param $e
      * @return string
      */
-    public function getExceptionDetail($e) : string
+    public function getExceptionDetail($e): string
     {
-        $message = $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine() . '<br>Stack trace:<br>';
+        $message = "Message:{$e->getMessage()}" . PHP_EOL;
+        $message .= "File:{$e->getFile()}" . PHP_EOL;
+        $message .= "Line:{$e->getLine()}" . PHP_EOL;
+        $message .= "Content:" . PHP_EOL;
         $trace = $e->getTrace();
         foreach ($trace as $key => $value) {
-            $message .= '#' . $key . ' ' . $value['file'] . '(' . $value['line'] . '): ' . $value['class'] . $value['type'] . $value['function'] . '()<br>';
+            $message .= "#{$key} {$value['file']}({$value['line']}):{$value['class']}{$value['type']}{$value['function']}()" . PHP_EOL;
         }
         return $message;
     }
@@ -972,7 +1048,7 @@ class api
      * @param $error
      * @param int $status
      */
-    public function responseError($error, $status = self::CODE_ERROR) : void
+    public function responseError($error, $status = self::CODE_ERROR): void
     {
         $this->data['msg'] = $error;
         $this->data['code'] = $status;
@@ -985,14 +1061,14 @@ class api
      * @param int $mode
      * @param bool $write_log
      */
-    public function responseOk($data = [], $mode = 1, $write_log = true) : void
+    public function responseOk($data = [], int $mode = 1, bool $write_log = true): void
     {
         if ($mode == 1) {
             if (!empty($data)) {
-                $this->checkResponseDataFields($this->fields, $data);
-                foreach ($data as $key => $value) {
-                    $this->data['data'][$key] = $value;
+                if ($this->debug) {
+                    $this->checkResponseDataFields($this->fields, $data);
                 }
+                $this->data['data'] = $data;
             }
             if (!isset($this->data['msg'])) {
                 $this->data['msg'] = '';
