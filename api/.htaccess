@@ -1,5 +1,7 @@
 <IfModule mod_rewrite.c>
  RewriteEngine on
+
+ RewriteBase /api
  # 开启$_SERVER 函数获取特殊header：Authorization的值
  SetEnvIf Authorization .+ HTTP_AUTHORIZATION=$0
  
@@ -11,8 +13,8 @@
  RewriteRule ^(.*[^/])$ $1/ 
  RewriteRule ^([^/]*)/(.*)/$ $1.$2/
  
- RewriteRule ^doc\.([^/]*)/$ index.php?req=$1&doc=1 [QSA,L]
- 
+ RewriteRule ^doc(\.([^/]*))?/$ index.php?req=$2&doc=1 [QSA,L]
+
  RewriteRule ^([^/]*)/$ index.php?req=$1 [QSA,L]
 </IfModule>
 
