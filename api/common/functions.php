@@ -22,7 +22,7 @@ function getProEnv(string $conf_name, $default = null)
     static $env_configs = [];
     if (empty($env_configs)) {
         require LIB_DIR . 'spyc/Spyc.php';
-        $env_configs = Spyc::YAMLLoad(API_DIR . 'env.' . PROJECT_ENV . '.yaml');
+        $env_configs = spyc_load_file(API_DIR . 'env.' . PROJECT_ENV . '.yaml');
     }
 
     $conf_names = explode('.', $conf_name);

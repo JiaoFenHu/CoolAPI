@@ -46,10 +46,10 @@ class JwtAuthorize extends BaseService
     public function createToken(int $userId, array $claims = []): string
     {
         $configure = $this->getConfigure();
-        $this->api->memberId = $userId;
+        self::$api->memberId = $userId;
         $claims[$this->userFiled] = $userId;
 
-        $now = new DateTimeImmutable();
+        $now = new \DateTimeImmutable();
         $token = $configure->builder()
             ->issuedBy(API_DOMAIN_REAL)
             ->permittedFor(API_DOMAIN_REAL)
@@ -99,12 +99,12 @@ class JwtAuthorize extends BaseService
             $this->checkTokenClaims($token->claims()->get('jti'), 'jti');
 
             $userId = $token->claims()->get($this->userFiled);
-            $this->api->memberId = $userId * 1;
+            self::$api->memberId = $userId * 1;
 
         } catch (ConstraintViolation $e) {
-            $this->api->responseError($e->getMessage(), $this->api::CODE_LOGIN_VALID);
+            self::$api->responseError($e->getMessage(), self::$api::CODE_LOGIN_VALID);
         } catch (CannotDecodeContent $e) {
-            $this->api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
+            self::$api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
         }
         return true;
     }
@@ -129,7 +129,7 @@ class JwtAuthorize extends BaseService
                 }
                 break;
             case 'jti':
-                if ($value !== sha1((string)$this->api->memberId)) {
+                if ($value !== sha1(self::$api->memberId)) {
                     throw new ConstraintViolation("身份验证失败，身份编号异常！");
                 }
                 break;
@@ -139,10 +139,10 @@ class JwtAuthorize extends BaseService
 
     /**
      * 验证token的有效范围内
-     * @param DateTimeImmutable $s_dt
-     * @param DateTimeImmutable $e_dt
+     * @param \DateTimeImmutable $s_dt
+     * @param \DateTimeImmutable $e_dt
      */
-    private function checkTokenTimeValid(DateTimeImmutable $s_dt, DateTimeImmutable $e_dt)
+    private function checkTokenTimeValid(\DateTimeImmutable $s_dt, \DateTimeImmutable $e_dt)
     {
         $begin_time = $s_dt->getTimestamp();
         $end_time = $e_dt->getTimestamp();

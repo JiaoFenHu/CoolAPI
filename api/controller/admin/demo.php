@@ -12,27 +12,69 @@ $this->info = ['req' => 'test'];
 $this->info['summary'] = '测试';
 if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
-    $this->authorization = "";
+    $this->authorization = ['browse', 'detail' => '查看详情'];
     $this->headers = ['@token'];
     $this->parameter = ['hashId'];
-    $this->fields = ['records' => ['mode', 'hashId', 'success', 'createTime'], 'total'];
+    $this->fields = ['list' => ['mode', 'hashId', 'success', 'createTime'], 'total'];
     $param = $this->apiInit();
     //具体执行代码
     $jwt = $this->loadService("jwtAuthorize");
-    $demo = $this->loadService("demo");
 
-    prints(getRequestHeaders(), false);
+    $data = [];
+    $data['total'] = 10;
+    // $data['list'][] = [
+    //     'mode' => 1,
+    //     'hashId' => 'Sxvdfg',
+    //     'success' => true,
+    //     'createTime' => date('Y-m-d H:i:s')
+    // ];
+    // $data['list'][] = [
+    //     'mode' => 2,
+    //     'hashId' => 'Sxvdfg',
+    //     'success' => false,
+    //     'createTime' => date('Y-m-d H:i:s')
+    // ];
 
-    // $token = $jwt->createToken(['member_id' => 1], 1);
-    // prints($token, true, false);
-    // // eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsIm5hbWUiOiJ0ZXN0In0.eyJpc3MiOiJodHRwczpcL1wvaHpzbWsubG9va2JpLmNvbVwvIiwiYXVkIjoiaHR0cHM6XC9cL2h6c21rLmxvb2tiaS5jb21cLyIsImp0aSI6IjExYlJuWGtsYkFWTjAzVTMiLCJpYXQiOjE2NDU2MDg5NDUsIm5iZiI6MTY0NTYwODk0NSwiZXhwIjoxNjQ1Njk1MzQ1LCJtZW1iZXJfaWQiOjF9.QX_AvQk7JO5geCIMjN7Mw_tg_UCjBzbfam8mr9BdrOs
-    // //输出返回数据
-    // $parse = $jwt->parseToken($token);
-    // prints($parse, false, false);
-    //
-    // $jwt->verifyToken('1'. $token);
 
-    $demo->test();
+    $data['list'] = [
+        'mode' => 3,
+        'hashId' => 'adsfvl',
+        'success' => true,
+        'createTime' => date('Y-m-d H:i:s')
+    ];
+
+    $this->responseOk($data);
+}
+//添加所有接口参数
+$this->addSubset();
+
+
+$this->info = ['req' => 'test.infos'];
+$this->info['summary'] = '测试';
+if ($this->checkThisApi()) {
+    $this->info['method'] = 'GET';
+    $this->authorization = ['browse', 'detail' => '查看详情'];
+    $this->headers = ['@token'];
+    $this->parameter = ['hashId'];
+    $this->fields = ['list' => ['mode', 'hashId', 'success', 'createTime'], 'total'];
+    $param = $this->apiInit();
+    //具体执行代码
+    $jwt = $this->loadService("jwtAuthorize");
+
+    $data = [];
+    $data['total'] = 10;
+    $data['list'][] = [
+        'mode' => 1,
+        'hashId' => 'Sxvdfg',
+        'success' => true,
+        'createTime' => date('Y-m-d H:i:s')
+    ];
+    $data['list'][] = [
+        'mode' => 2,
+        'hashId' => 'Sxvdfg',
+        'success' => false,
+        'createTime' => date('Y-m-d H:i:s')
+    ];
 
     $this->responseOk($data);
 }
