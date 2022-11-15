@@ -492,7 +492,7 @@ class api
                 if (is_array($value['data'])) {
                     if (!empty($params[$rtk])) {
                         foreach ($params[$rtk] as $tip_keys => &$son_params) {
-                            $son_params = $this->checkRequestParams($value['data'], $son_params, -1, $tip_keys);
+                            $son_params = $this->checkRequestParams($value['data'], $son_params, $file, $tip_keys);
                         }
                     }
                 }
@@ -516,7 +516,7 @@ class api
                                 $selector_text .= $list_k . '(' . $list_v . '),';
                             }
                             $selector_text .= rtrim($selector_text, ',');
-                            $this->responseError("参数 " . $rtk . " 数值不正确,请输入正确的值。" . $selector_text);
+                            $this->responseError("参数「{$rtk}」数值不正确,请输入正确的值{$selector_text}");
                         }
                         $this->responseError('参数可选值异常!');
                     }
@@ -527,10 +527,13 @@ class api
                     case 'string':
                         if (!is_string($param)) {
                             if ($this->debug) {
-                                $this->responseError("参数 " . $rtk . " 类型不正确，请传入字符串值。");
+                                $this->responseError("参数「{$rtk}」类型不正确，请传入字符串值。");
                             }
                             $this->responseError('参数数据格式异常!');
                         }
+
+                        $maxLen = $this->docParams[$key]['maxLength'] ?? false;
+                        $minLen = $this->docParams[$key]['minLength'] ?? false;
                         break;
                     case 'array[int]':
                     case 'array[string]':

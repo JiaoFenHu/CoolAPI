@@ -8,11 +8,11 @@ if ($this->loadFieldDoc) {
     $this->docParams['pattern'] = ['type' => 'int', 'summary' => '选项', 'default' => 1];
 }
 
-$this->info = ['req' => 'test'];
-$this->info['summary'] = '测试';
+$this->info = ['req' => 'test.list'];
+$this->info['summary'] = '列表测试';
 if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
-    $this->authorization = ['browse', 'detail' => '查看详情'];
+    $this->authorization = ['browse'];
     $this->headers = ['@token'];
     $this->parameter = ['hashId'];
     $this->fields = ['list' => ['mode', 'hashId', 'success', 'createTime'], 'total'];
@@ -22,24 +22,16 @@ if ($this->checkThisApi()) {
 
     $data = [];
     $data['total'] = 10;
-    // $data['list'][] = [
-    //     'mode' => 1,
-    //     'hashId' => 'Sxvdfg',
-    //     'success' => true,
-    //     'createTime' => date('Y-m-d H:i:s')
-    // ];
-    // $data['list'][] = [
-    //     'mode' => 2,
-    //     'hashId' => 'Sxvdfg',
-    //     'success' => false,
-    //     'createTime' => date('Y-m-d H:i:s')
-    // ];
-
-
-    $data['list'] = [
-        'mode' => 3,
-        'hashId' => 'adsfvl',
+    $data['list'][] = [
+        'mode' => 1,
+        'hashId' => 'Sxvdfg',
         'success' => true,
+        'createTime' => date('Y-m-d H:i:s')
+    ];
+    $data['list'][] = [
+        'mode' => 2,
+        'hashId' => 'Sxvdfg',
+        'success' => false,
         'createTime' => date('Y-m-d H:i:s')
     ];
 
@@ -50,7 +42,7 @@ $this->addSubset();
 
 
 $this->info = ['req' => 'test.infos'];
-$this->info['summary'] = '测试';
+$this->info['summary'] = '详情字段测试';
 if ($this->checkThisApi()) {
     $this->info['method'] = 'GET';
     $this->authorization = ['browse', 'detail' => '查看详情'];
