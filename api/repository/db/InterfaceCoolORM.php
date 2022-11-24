@@ -4,7 +4,7 @@ namespace repository\db;
 
 interface InterfaceCoolORM
 {
-    public function check(array $where, array $join, string $error);
+    public function check(array $where, array $join);
 
     public function get(array $where, $column, array $join);
 

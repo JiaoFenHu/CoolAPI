@@ -3,13 +3,14 @@ declare(strict_types = 1);
 
 namespace repository;
 
-use PDO;
+use repository\basic\Configure;
 use repository\db\InterfaceCoolORM;
 use repository\db\CoolDB;
 
 class CoolORM implements InterfaceCoolORM
 {
-    private $db;
+    private static array $db;
+    private string $connect;
 
     public string $table_name;
     public string $table_name_as;
@@ -17,24 +18,12 @@ class CoolORM implements InterfaceCoolORM
     /**
      * 初始化父级DB类
      */
-    protected function initDB()
+    protected function initDB($connect = 'default')
     {
-        if (!($this->db instanceof CoolDB)) {
-            $db = new CoolDB([
-                'db_type' => 'mysql',
-                'host' => getProEnv('db.host'),
-                'port' => getProEnv('db.port'),
-                'database' => getProEnv('db.database'),
-                'name' => getProEnv('db.name'),
-                'password' => getProEnv('db.password'),
-                'log' => 1,
-                'prepare' => 1,
-                'real_delete' => getProEnv('db.realDel'),
-                'charset' => getProEnv('db.charset'),
-                'prefix' => getProEnv('db.prefix'),
-                'option' => array(PDO::ATTR_CASE => PDO::CASE_NATURAL),
-            ]);
-            $this->db = $db;
+        if (!(self::$db[$connect] instanceof CoolDB)) {
+            $db = new CoolDB(Configure::database($connect));
+            self::$db[$connect] = $db;
+            $this->connect = $connect;
         }
     }
 
@@ -42,15 +31,14 @@ class CoolORM implements InterfaceCoolORM
      * 验证条件内的数据是否存在
      * @param array $where
      * @param array $join
-     * @param string $error
      * @return bool
      */
-    public function check(array $where, array $join = [], string $error = "") : bool
+    public function check(array $where, array $join = []) : bool
     {
         if (empty($join)) {
-            return $this->db->has($this->table_name, $where);
+            return self::$db[$this->connect]->has($this->table_name, $where);
         }
-        return $this->db->has($this->table_name_as, $join, $where);
+        return self::$db[$this->connect]->has($this->table_name_as, $join, $where);
     }
 
     /**
@@ -60,12 +48,12 @@ class CoolORM implements InterfaceCoolORM
      * @param array $join
      * @return mixed
      */
-    public function get(array $where, $column = ['*'], $join = [])
+    public function get(array $where, $column = ['*'], array $join = [])
     {
         if (empty($join)) {
-            return $this->db->get($this->table_name, $column, $where);
+            return self::$db[$this->connect]->get($this->table_name, $column, $where);
         }
-        return $this->db->get($this->table_name_as, $join, $column, $where);
+        return self::$db[$this->connect]->get($this->table_name_as, $join, $column, $where);
     }
 
     /**
@@ -75,12 +63,12 @@ class CoolORM implements InterfaceCoolORM
      * @param array $join
      * @return array
      */
-    public function getList(array $where, $column = ['*'], $join = [])
+    public function getList(array $where, $column = ['*'], array $join = []): array
     {
         if (empty($join)) {
-            return $this->db->select($this->table_name, $column, $where);
+            return self::$db[$this->connect]->select($this->table_name, $column, $where);
         }
-        return $this->db->select($this->table_name_as, $join, $column, $where);
+        return self::$db[$this->connect]->select($this->table_name_as, $join, $column, $where);
     }
 
     /**
@@ -88,11 +76,11 @@ class CoolORM implements InterfaceCoolORM
      * @param array $set
      * @return string
      */
-    public function add(array $set)
+    public function add(array $set): string
     {
         $set['#create_time'] = 'NOW()';
         $set['#edit_time'] = 'NOW()';
-        return $this->db->insert($this->table_name, $set);
+        return self::$db[$this->connect]->insert($this->table_name, $set);
     }
 
     /**
@@ -104,7 +92,7 @@ class CoolORM implements InterfaceCoolORM
     public function update(array $set, array $where)
     {
         $set['#edit_time'] = 'NOW()';
-        return $this->db->update($this->table_name, $set, $where);
+        return self::$db[$this->connect]->update($this->table_name, $set, $where);
     }
 
     /**
@@ -113,9 +101,9 @@ class CoolORM implements InterfaceCoolORM
      * @param boolean $real_remove
      * @return mixed
      */
-    public function delete(array $set, $real_remove = false)
+    public function delete(array $set, bool $real_remove = false)
     {
-        return $this->db->delete($this->table_name, $set, $real_remove ? 1 : 0);
+        return self::$db[$this->connect]->delete($this->table_name, $set, $real_remove ? 1 : 0);
     }
 
 
@@ -124,15 +112,15 @@ class CoolORM implements InterfaceCoolORM
      */
     public function outputSQL()
     {
-        $this->db->debug();
+        self::$db[$this->connect]->debug();
     }
 
     /**
      * 获取数据库orm操作对象
      * @return CoolDB
      */
-    public function DBInstances()
+    public function DBInstances(): CoolDB
     {
-        return $this->db;
+        return self::$db[$this->connect];
     }
 }

@@ -67,7 +67,23 @@ class Configure extends Instance
      */
     final public static function app(string $confName, $default = null)
     {
-        $confData = Configure::getInstance()->getConfigData('app', $confName);
+        $confData = static::getInstance()->getConfigData('app', $confName);
+        if (is_null($confData) && !is_null($default)) {
+            return $default;
+        }
+        return $confData;
+    }
+
+    /**
+     * 数据库配置
+     * @param string $confName
+     * @param $default
+     * @return mixed
+     * @throws CoolException
+     */
+    final public static function database(string $confName, $default = null)
+    {
+        $confData = static::getInstance()->getConfigData('database', $confName);
         if (is_null($confData) && !is_null($default)) {
             return $default;
         }

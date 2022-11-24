@@ -11,7 +11,8 @@
         "psr-4": {
             "libs\\": "libs",
             "service\\": "api/service",
-            "repository\\": "api/repository"
+            "repository\\": "api/repository",
+            "app\\": "api/app"
         }
     },
     "repositories": {

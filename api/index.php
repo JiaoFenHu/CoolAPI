@@ -79,19 +79,7 @@ class api
 
             // 文档
             if ($_REQUEST['req'] == "" && $_REQUEST['doc'] == 1) {
-                $apiStations = \repository\basic\Configure::app('apiStationDirs');
-                $infoDirList = [];
-                $dh = opendir($this->interfaceDir);
-                while (($file = readdir($dh)) !== false) {
-                    if ($file !== '.' && $file !== '..') {
-                        $infoDirList[] = [
-                            'name' => $apiStations[$file] ?? "站点「{$file}」",
-                            'client' => $file
-                        ];
-                    }
-                }
-                closedir($dh);
-                $this->responseOk(jsonEncodeExtend($infoDirList), 2, false);
+                $this->listStation();
             }
 
             // 接口
@@ -134,6 +122,28 @@ class api
         $this->docParams['success'] = ['type' => 'bool', 'summary' => '是否成功'];
         $this->docParams['createTime'] = ['type' => 'datetime', 'summary' => '创建时间'];
         $this->docParams[$this->authField] = ['type' => 'string', 'summary' => '登录身份认证'];
+    }
+
+    /**
+     * 加载站点
+     * @return void
+     * @throws \repository\exception\CoolException
+     */
+    private function listStation(): void
+    {
+        $apiStations = \repository\basic\Configure::app('apiStationDirs');
+        $infoDirList = [];
+        $dh = opendir($this->interfaceDir);
+        while (($file = readdir($dh)) !== false) {
+            if ($file !== '.' && $file !== '..') {
+                $infoDirList[] = [
+                    'name' => $apiStations[$file] ?? "站点「{$file}」",
+                    'client' => $file
+                ];
+            }
+        }
+        closedir($dh);
+        $this->responseOk(jsonEncodeExtend($infoDirList), 2, false);
     }
 
     /**
