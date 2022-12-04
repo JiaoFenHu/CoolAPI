@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace service;
+namespace app\admin\service;
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -10,17 +10,12 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use repository\BaseService;
 use repository\exception\CoolApiException;
 
-class Office extends BaseService
+class OfficeService extends BaseService
 {
-    private $sheet_title = 'sheetReport';
-    private $horizontal = 'center';
-    private $vertical = 'center';
-    private $columnWidth = [];
-
-    function __construct(\api $api)
-    {
-        self::$api = $api;
-    }
+    private string $sheet_title = 'sheetReport';
+    private string $horizontal = 'center';
+    private string $vertical = 'center';
+    private array $columnWidth = [];
 
     /**
      * 设置数据的水平方向
@@ -113,7 +108,7 @@ class Office extends BaseService
 
     /**
      * 设置sheet页标题
-     * @param $title
+     * @param array $title
      */
     function set_sheet_title(array $title): void
     {

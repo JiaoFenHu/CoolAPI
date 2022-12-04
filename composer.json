@@ -10,9 +10,9 @@
     "autoload": {
         "psr-4": {
             "libs\\": "libs",
-            "service\\": "api/service",
             "repository\\": "api/repository",
-            "app\\": "api/app"
+            "app\\": "api/app",
+            "model\\": "api/models"
         }
     },
     "repositories": {

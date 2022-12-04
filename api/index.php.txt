@@ -51,7 +51,7 @@ class api
     #接口访问日志开关
     private bool $openApiLog;
     #接口日志服务
-    private \app\admin\service\InterfaceLog $interfaceLogService;
+    private \service\InterfaceLog $interfaceLogService;
     #实例化service组
     private static array $moduleInstances = [];
     #用户ID
@@ -238,7 +238,7 @@ class api
             $origField = substr($origField, 1);
         }
 
-        if ((!array_key_exists($field, $data)) && $must) {
+        if ((!is_array($data) || !array_key_exists($field, $data)) && $must) {
             $this->responseError("响应参数「{$field}」缺失!");
         }
 

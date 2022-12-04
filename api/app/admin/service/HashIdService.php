@@ -1,26 +1,21 @@
 <?php
 declare(strict_types=1);
 
-namespace service;
+namespace app\admin\service;
 
 use Hashids\Hashids;
 use repository\BaseService;
 
-class HashId extends BaseService
+class HashIdService extends BaseService
 {
-    private static $salt = '1one_';
-
-    function __construct(\api $api)
-    {
-        self::$api = $api;
-    }
+    private static string $salt = '1one_';
 
     /**
      * 英文字母字符串
      * @param int $_mode
      * @return string
      */
-    private function getEnglishAlphabet($_mode = 1)
+    private function getEnglishAlphabet(int $_mode = 1): string
     {
         $string = 'abcdefghijklmnopqrstuvwxyz';
         switch ($_mode) {
@@ -37,7 +32,7 @@ class HashId extends BaseService
      * 获得混合字符串
      * @return string
      */
-    private function getMixtureAlphabet()
+    private function getMixtureAlphabet(): string
     {
         return $this->getEnglishAlphabet(3) . '0123456789';
     }
@@ -47,10 +42,9 @@ class HashId extends BaseService
      * @param $id
      * @param int $len
      * @param int $mode
-     * @return false|mixed|string
-     * @throws Exception
+     * @return string
      */
-    public function getHashId($id, $len = 8, $mode = 1)
+    public function getHashId($id, int $len = 8, int $mode = 1): string
     {
         switch ($mode) {
             case 1:

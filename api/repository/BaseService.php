@@ -3,22 +3,21 @@ declare(strict_types = 1);
 
 namespace repository;
 
-use repository\CoolORM as ORM;
-
-class BaseService extends ORM
+class BaseService
 {
-    protected static \api $api;
+    protected \api $api;
     protected static array $_instances = [];
 
     /**
      * 单例模式加载service类
      * @return mixed|BaseService|static
      */
-    final public static function getInstance()
+    final public static function getInstance(\api $api)
     {
         $service = get_called_class();
         if (!(self::$_instances[$service] instanceof BaseService)) {
-            self::$_instances[$service] = new static(static::$api);
+            self::$_instances[$service] = new static();
+            self::$_instances[$service]->api = $api;
         }
         return self::$_instances[$service];
     }

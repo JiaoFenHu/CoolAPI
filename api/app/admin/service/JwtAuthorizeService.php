@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace service;
+namespace app\admin\service;
 
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
@@ -11,17 +11,12 @@ use Lcobucci\JWT\Encoding\CannotDecodeContent;
 use Lcobucci\JWT\Token;
 use repository\BaseService;
 
-class JwtAuthorize extends BaseService
+class JwtAuthorizeService extends BaseService
 {
     private Sha256 $signer;
     private InMemory $key;
 
     private string $userFiled = 'memberId';
-
-    function __construct(\api $api)
-    {
-        self::$api = $api;
-    }
 
     /**
      * jwt配置
@@ -46,7 +41,7 @@ class JwtAuthorize extends BaseService
     public function createToken(int $userId, array $claims = []): string
     {
         $configure = $this->getConfigure();
-        self::$api->memberId = $userId;
+        $this->api->memberId = $userId;
         $claims[$this->userFiled] = $userId;
 
         $now = new \DateTimeImmutable();
@@ -82,7 +77,7 @@ class JwtAuthorize extends BaseService
      * @param string $token
      * @return bool
      */
-    public function verifyToken(string $token)
+    public function verifyToken(string $token): bool
     {
         try {
             $configure = $this->getConfigure();
@@ -99,12 +94,12 @@ class JwtAuthorize extends BaseService
             $this->checkTokenClaims($token->claims()->get('jti'), 'jti');
 
             $userId = $token->claims()->get($this->userFiled);
-            self::$api->memberId = $userId * 1;
+            $this->api->memberId = $userId * 1;
 
         } catch (ConstraintViolation $e) {
-            self::$api->responseError($e->getMessage(), self::$api::CODE_LOGIN_VALID);
+            $this->api->responseError($e->getMessage(), $this->api::CODE_LOGIN_VALID);
         } catch (CannotDecodeContent $e) {
-            self::$api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
+            $this->api->responseError("身份验证失败，您正在非法操作，已记录您的IP！");
         }
         return true;
     }
@@ -115,7 +110,7 @@ class JwtAuthorize extends BaseService
      * @param string $mode
      * @return bool
      */
-    private function checkTokenClaims($value, string $mode)
+    private function checkTokenClaims($value, string $mode): bool
     {
         switch ($mode) {
             case 'iss':
@@ -129,7 +124,7 @@ class JwtAuthorize extends BaseService
                 }
                 break;
             case 'jti':
-                if ($value !== sha1(self::$api->memberId)) {
+                if ($value !== sha1((string)$this->api->memberId)) {
                     throw new ConstraintViolation("身份验证失败，身份编号异常！");
                 }
                 break;
